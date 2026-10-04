@@ -25,18 +25,25 @@ def _hash_password(plain: str) -> str:
     return hashlib.sha256(plain.encode('utf-8')).hexdigest()
 
 def _query(sql: str, params=(), one=False, write=False):
-    """Ejecuta una query y devuelve dict(s) o el lastrowid/rowcount."""
+    """Ejecuta una query y devuelve dict(s) o el id insertado/rowcount."""
     conn = get_db_connection()
     if not conn:
         return None
-    cur = conn.cursor(dictionary=True)
+    # Las filas llegan como dict gracias a row_factory=dict_row (ver database.py).
+    cur = conn.cursor()
+    # PostgreSQL no tiene lastrowid como MySQL: el id del registro nuevo se pide
+    # con RETURNING. En todas las tablas la llave primaria es la primera columna,
+    # así que se toma el primer valor de la fila devuelta.
+    es_insert = write and sql.lstrip().upper().startswith('INSERT')
+    if es_insert:
+        sql = f"{sql} RETURNING *"
     cur.execute(sql, params)
     if write:
+        fila = cur.fetchone() if es_insert else None
         conn.commit()
-        result = cur.lastrowid if cur.lastrowid else cur.rowcount
+        result = next(iter(fila.values())) if fila else cur.rowcount
     elif one:
         result = cur.fetchone()
-        cur.fetchall()
     else:
         result = cur.fetchall()
     cur.close()
@@ -106,8 +113,9 @@ def _id_rol_por_clave(clave: str):
     El nuevo esquema exige Usuario.IdRol como llave foránea obligatoria hacia Rol,
     además de la columna Usuario.Rol (texto, copia de Rol.Clave) que ya usaba el resto
     de la aplicación para no tener que hacer join en cada consulta."""
-    row = _query("SELECT IdRol FROM Rol WHERE Clave = %s", (clave,), one=True)
-    return row['IdRol'] if row else None
+    # Alias en minúscula: PostgreSQL devuelve los nombres sin comillas en minúscula (idrol).
+    row = _query("SELECT IdRol AS id_rol FROM Rol WHERE Clave = %s", (clave,), one=True)
+    return row['id_rol'] if row else None
 
 def get_all_usuarios(id_entidad=None):
     """Trae todos los usuarios. Si se filtra por id_entidad solo retorna los de esa entidad."""
@@ -156,7 +164,7 @@ def crear_token_recuperacion(id_usuario: int, token_hash: str, minutos: int, ip:
            (id_usuario,), write=True)
     return _query(
         """INSERT INTO TokenRecuperacion (IdUsuario, TokenHash, ExpiraEn, IpSolicitud)
-           VALUES (%s, %s, NOW() + INTERVAL %s MINUTE, %s)""",
+           VALUES (%s, %s, NOW() + %s * INTERVAL '1 minute', %s)""",
         (id_usuario, token_hash, minutos, ip), write=True
     )
 
@@ -296,7 +304,7 @@ _CAMPOS_CANINO = """
     (SELECT FechaAplicacion FROM CaninoVacuna cv WHERE cv.IdCanino = c.IdCanino
         ORDER BY FechaAplicacion DESC LIMIT 1) AS ultima_vacunacion,
     (SELECT FechaVencimiento FROM CaninoVacuna cv WHERE cv.IdCanino = c.IdCanino
-        AND FechaVencimiento >= CURDATE() ORDER BY FechaVencimiento ASC LIMIT 1) AS proxima_vacunacion
+        AND FechaVencimiento >= CURRENT_DATE ORDER BY FechaVencimiento ASC LIMIT 1) AS proxima_vacunacion
 """
 
 def get_all_caninos(id_entidad=None, id_guia=None, incluir_baja=False):
@@ -400,13 +408,14 @@ def update_canino(id_canino, nombre, raza, genero, especialidad, estado,
     # respecto al último registrado; evita duplicar una fila en cada edición del canino.
     if nombre_vacuna:
         ultimo = _query(
-            """SELECT NombreVacuna, FechaVencimiento FROM CaninoVacuna
+            """SELECT NombreVacuna AS nombre_vacuna, FechaVencimiento AS fecha_vencimiento
+               FROM CaninoVacuna
                WHERE IdCanino=%s ORDER BY FechaAplicacion DESC LIMIT 1""",
             (id_canino,), one=True
         )
         cambio = (not ultimo
-                  or ultimo['NombreVacuna'] != nombre_vacuna
-                  or str(ultimo['FechaVencimiento'] or '') != str(proxima_vacunacion or ''))
+                  or ultimo['nombre_vacuna'] != nombre_vacuna
+                  or str(ultimo['fecha_vencimiento'] or '') != str(proxima_vacunacion or ''))
         if cambio:
             create_vacuna_canino(
                 id_canino, nombre_vacuna,

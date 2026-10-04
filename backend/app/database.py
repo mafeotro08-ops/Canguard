@@ -1,5 +1,6 @@
-﻿# -*- coding: utf-8 -*-
-import mysql.connector
+# -*- coding: utf-8 -*-
+import psycopg
+from psycopg.rows import dict_row
 import os
 from dotenv import load_dotenv
 
@@ -7,17 +8,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_db_connection():
-    """Crea y devuelve una conexión a MySQL"""
+    """Crea y devuelve una conexión a PostgreSQL.
+
+    row_factory=dict_row hace que cada fila llegue como diccionario
+    ({'id': 1, 'nombre': 'Max'}), igual que hacía MySQL con dictionary=True,
+    así el resto de la aplicación no tiene que cambiar.
+    """
     try:
-        connection = mysql.connector.connect(
+        connection = psycopg.connect(
             host=os.getenv('DB_HOST', 'localhost'),
-            user=os.getenv('DB_USER', 'root'),
+            port=os.getenv('DB_PORT', '5432'),
+            user=os.getenv('DB_USER', 'postgres'),
             password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'k9_simple')
+            dbname=os.getenv('DB_NAME', 'K9'),
+            row_factory=dict_row,
         )
         return connection
     except Exception as e:
-        print(f"CRITICAL: Could not connect to MySQL. Check DB_HOST and credentials. Error: {e}")
+        print(f"CRITICAL: Could not connect to PostgreSQL. Check DB_HOST and credentials. Error: {e}")
         return None
 
 def test_connection():
@@ -27,7 +35,7 @@ def test_connection():
         if conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
-            cursor.fetchone()  # Hay que leer el resultado, si no, mysql-connector lanza "Unread result found" al cerrar el cursor
+            cursor.fetchone()
             cursor.close()
             conn.close()
             return True

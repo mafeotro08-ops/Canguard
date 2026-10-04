@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<!--
+  Correo de recuperación de contraseña.
+  Los correos NO soportan CSS moderno (Gmail/Outlook lo borran), por eso:
+  - el diseño se arma con <table> en vez de flex/grid
+  - todos los estilos van "inline" (style="...") en cada etiqueta
+  Variables: nombre, nombre_usuario, enlace, minutos
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperación de contraseña</title>
+</head>
+<body style="margin:0; padding:0; background-color:#eef1f5;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef1f5;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+
+                <!-- Tarjeta principal (máx. 560px de ancho) -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="max-width:560px; background-color:#ffffff; border-radius:12px; overflow:hidden; font-family:'Segoe UI', Arial, sans-serif;">
+
+                    <!-- Encabezado oscuro con la marca -->
+                    <tr>
+                        <td align="center" style="background-color:#020810; padding:32px 24px; border-bottom:4px solid #FFD700;">
+                            <div style="font-size:28px; font-weight:900; letter-spacing:6px; color:#ffffff;">
+                                CAN<span style="color:#FFD700;">GUARD</span>
+                            </div>
+                            <div style="font-size:11px; letter-spacing:4px; color:#FFD700; margin-top:6px;">
+                                SISTEMA TÁCTICO K9
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Cuerpo del mensaje -->
+                    <tr>
+                        <td style="padding:36px 36px 8px 36px; color:#1f2937;">
+                            <h1 style="margin:0 0 16px 0; font-size:22px; color:#020810;">
+                                Restablece tu contraseña
+                            </h1>
+                            <p style="margin:0 0 12px 0; font-size:15px; line-height:24px;">
+                                Hola <strong>{{ nombre }}</strong>,
+                            </p>
+                            <p style="margin:0 0 24px 0; font-size:15px; line-height:24px;">
+                                Recibimos una solicitud para restablecer la contraseña de tu cuenta
+                                <strong>{{ nombre_usuario }}</strong>. Haz clic en el botón para crear una nueva.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Botón dorado -->
+                    <tr>
+                        <td align="center" style="padding:0 36px 24px 36px;">
+                            <a href="{{ enlace }}" target="_blank"
+                                style="display:inline-block; background-color:#FFD700; color:#020810; font-size:15px; font-weight:800; letter-spacing:1px; text-decoration:none; padding:16px 36px; border-radius:8px;">
+                                CREAR NUEVA CONTRASEÑA
+                            </a>
+                        </td>
+                    </tr>
+
+                    <!-- Aviso de vencimiento -->
+                    <tr>
+                        <td style="padding:0 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#fffbea; border-left:4px solid #FFD700; border-radius:6px;">
+                                <tr>
+                                    <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#6b5300;">
+                                        ⏱ Este enlace vence en <strong>{{ minutos }} minutos</strong> y solo se puede usar una vez.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Pie -->
+                    <tr>
+                        <td style="padding:20px 36px; background-color:#f8fafc; border-top:1px solid #e5e7eb; font-size:12px; line-height:18px; color:#6b7280;">
+                            Si no solicitaste este cambio, ignora este correo: tu contraseña seguirá siendo la misma.
+                        </td>
+                    </tr>
+                </table>
+
+                <div style="font-family:'Segoe UI', Arial, sans-serif; font-size:11px; color:#9ca3af; margin-top:16px;">
+                    © CanGuard K9 · Este es un mensaje automático, no respondas a este correo.
+                </div>
+
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

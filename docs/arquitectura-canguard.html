@@ -1,0 +1,917 @@
+<title>CANGUARD Arquitectura</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* === TOKENS: LIGHT (base) === */
+:root {
+  --bg:           #F0F2F5;
+  --surface:      #FFFFFF;
+  --surface-alt:  #E8EBF0;
+  --ink:          #1C2333;
+  --ink-muted:    #5A6880;
+  --border:       #C8D0DA;
+  --accent:       #1D6B4F;
+  --accent-lt:    #E3F2EC;
+  --accent-hov:   #155A3F;
+  --code-bg:      #ECEEF3;
+  --tag-bg:       #E3F2EC;
+  --tag-fg:       #1D6B4F;
+  --warn-border:  #D97706;
+  --warn-bg:      #FEF3C7;
+  --warn-fg:      #92400E;
+  /* layer palette */
+  --l1-bg: #E9F5EF; --l1-bd: #9FCFBC; --l1-fg: #1D6B4F;
+  --l2-bg: #EAF0FB; --l2-bd: #9BBADA; --l2-fg: #1B4B8C;
+  --l3-bg: #F0EAF8; --l3-bd: #C0A2D8; --l3-fg: #5B1E99;
+  --l4-bg: #FBF3E8; --l4-bd: #D8B882; --l4-fg: #8B5510;
+}
+
+/* === TOKENS: DARK (media query — system pref) === */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:           #0C1420;
+    --surface:      #152030;
+    --surface-alt:  #1C2D42;
+    --ink:          #DDE4EF;
+    --ink-muted:    #8094B0;
+    --border:       #243450;
+    --accent:       #34D399;
+    --accent-lt:    #0A2E20;
+    --accent-hov:   #6EE7B7;
+    --code-bg:      #080F1C;
+    --tag-bg:       #0A2E20;
+    --tag-fg:       #34D399;
+    --warn-border:  #FBBF24;
+    --warn-bg:      #1A1000;
+    --warn-fg:      #FCD34D;
+    --l1-bg: #0A2618; --l1-bd: #155A38; --l1-fg: #34D399;
+    --l2-bg: #0A1828; --l2-bd: #15385A; --l2-fg: #60A5FA;
+    --l3-bg: #18082C; --l3-bd: #38155A; --l3-fg: #A78BFA;
+    --l4-bg: #2C1600; --l4-bd: #5A3A10; --l4-fg: #FBB04F;
+  }
+}
+
+/* === TOKENS: DARK (explicit toggle) === */
+:root[data-theme="dark"] {
+  --bg:           #0C1420;
+  --surface:      #152030;
+  --surface-alt:  #1C2D42;
+  --ink:          #DDE4EF;
+  --ink-muted:    #8094B0;
+  --border:       #243450;
+  --accent:       #34D399;
+  --accent-lt:    #0A2E20;
+  --accent-hov:   #6EE7B7;
+  --code-bg:      #080F1C;
+  --tag-bg:       #0A2E20;
+  --tag-fg:       #34D399;
+  --warn-border:  #FBBF24;
+  --warn-bg:      #1A1000;
+  --warn-fg:      #FCD34D;
+  --l1-bg: #0A2618; --l1-bd: #155A38; --l1-fg: #34D399;
+  --l2-bg: #0A1828; --l2-bd: #15385A; --l2-fg: #60A5FA;
+  --l3-bg: #18082C; --l3-bd: #38155A; --l3-fg: #A78BFA;
+  --l4-bg: #2C1600; --l4-bd: #5A3A10; --l4-fg: #FBB04F;
+}
+
+/* === RESET + BASE === */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+  background: var(--bg);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === DOCUMENT LAYOUT === */
+.doc-wrap {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  grid-template-areas: "toc main";
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  gap: 0 48px;
+  align-items: start;
+}
+
+.doc-toc  { grid-area: toc; }
+.doc-main { grid-area: main; max-width: 720px; }
+
+@media (max-width: 780px) {
+  .doc-wrap {
+    grid-template-columns: 1fr;
+    grid-template-areas: "toc" "main";
+    padding: 20px 16px;
+  }
+  .doc-toc { position: static !important; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 28px; }
+}
+
+/* === TOC === */
+.toc-sticky { position: sticky; top: 32px; }
+
+.toc-head {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.toc-nav { list-style: none; margin: 0; padding: 0; }
+.toc-nav li { margin: 0; }
+
+.toc-nav a {
+  display: block;
+  padding: 5px 10px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  border-radius: 0 4px 4px 0;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.toc-nav a:hover,
+.toc-nav a:focus {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-lt);
+  outline: none;
+}
+
+.toc-sub { list-style: none; margin: 0; padding: 0; }
+.toc-sub a { padding-left: 22px; font-size: 12px; }
+
+/* === COVER === */
+.doc-cover {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: 32px 36px;
+  margin-bottom: 48px;
+}
+
+.cover-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 10px;
+}
+
+.cover-title {
+  font-family: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0 0 8px;
+  text-wrap: balance;
+}
+
+.cover-sub {
+  font-size: 15px;
+  color: var(--ink-muted);
+  margin: 0 0 24px;
+  max-width: 55ch;
+}
+
+.cover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+/* === SECTIONS === */
+.doc-section { margin-bottom: 52px; }
+
+.section-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+
+h2 {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 25px;
+  font-weight: 400;
+  color: var(--ink);
+  margin: 0 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  text-wrap: balance;
+  line-height: 1.2;
+}
+
+h3 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 28px 0 8px;
+  letter-spacing: 0.01em;
+}
+
+h4 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 16px 0 6px;
+}
+
+p {
+  color: var(--ink);
+  max-width: 65ch;
+  margin: 0 0 14px;
+}
+
+ul, ol {
+  max-width: 65ch;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+
+ul li, ol li { margin-bottom: 3px; }
+ul li strong, ol li strong { color: var(--ink); font-weight: 600; }
+
+/* === ARCH DIAGRAM === */
+.arch-diagram {
+  margin: 24px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.arch-layer {
+  border: 1.5px solid;
+  border-radius: 5px;
+  padding: 14px 18px;
+}
+
+.arch-layer-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+
+.arch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.arch-chip {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.arch-arrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  justify-content: center;
+}
+
+.arch-arrow::before,
+.arch-arrow::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  max-width: 50px;
+  background: var(--border);
+}
+
+/* Layer color tokens applied via classes */
+.layer-1 { background: var(--l1-bg); border-color: var(--l1-bd); }
+.layer-1 .arch-layer-label { color: var(--l1-fg); }
+
+.layer-2 { background: var(--l2-bg); border-color: var(--l2-bd); }
+.layer-2 .arch-layer-label { color: var(--l2-fg); }
+
+.layer-3 { background: var(--l3-bg); border-color: var(--l3-bd); }
+.layer-3 .arch-layer-label { color: var(--l3-fg); }
+
+.layer-4 { background: var(--l4-bg); border-color: var(--l4-bd); }
+.layer-4 .arch-layer-label { color: var(--l4-fg); }
+
+/* === TABLE === */
+.tbl-wrap { overflow-x: auto; margin: 18px 0; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+thead th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-muted);
+  padding: 9px 13px;
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--surface);
+}
+
+tbody td {
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  vertical-align: top;
+  background: var(--surface);
+}
+
+tbody tr:last-child td { border-bottom: none; }
+
+tbody tr.sel td { background: var(--accent-lt); }
+tbody tr.sel td:first-child {
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+}
+
+.c-yes { color: var(--accent); font-weight: 500; }
+.c-mid { color: var(--warn-border); }
+.c-no  { color: var(--ink-muted); }
+
+/* === ROADMAP === */
+.roadmap { margin: 24px 0; }
+
+.road-item {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 0 24px;
+}
+
+.road-left {
+  text-align: right;
+  padding: 2px 20px 32px 0;
+  border-right: 2px solid var(--border);
+  position: relative;
+}
+
+.road-item:last-child .road-left { border-right-style: dashed; }
+
+.road-left::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2.5px solid var(--accent);
+}
+
+.road-horizon {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 3px;
+}
+
+.road-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--ink);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.road-right { padding-bottom: 32px; }
+
+/* === CODE === */
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin: 14px 0;
+}
+
+code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* === CALLOUT === */
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-lt);
+  padding: 12px 16px;
+  border-radius: 0 5px 5px 0;
+  margin: 16px 0;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+/* === TAG === */
+.tag {
+  display: inline-block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  background: var(--tag-bg);
+  color: var(--tag-fg);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+/* === FILE TREE === */
+.ftree {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.85;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 16px 18px;
+  color: var(--ink);
+  margin: 14px 0;
+  overflow-x: auto;
+}
+
+.ft-d { color: var(--accent); }
+.ft-c { color: var(--ink-muted); }
+
+/* === DIVIDER === */
+.section-rule {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 20px;
+}
+
+/* === PRINT === */
+@media print {
+  .doc-toc { display: none; }
+  .doc-wrap { grid-template-columns: 1fr; grid-template-areas: "main"; }
+  body { background: #fff; color: #000; }
+  .doc-cover { border-left-color: #000; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+
+<div class="doc-wrap">
+
+  <!-- ===== SIDEBAR TOC ===== -->
+  <aside class="doc-toc">
+    <div class="toc-sticky">
+      <p class="toc-head">Contenido</p>
+      <ul class="toc-nav">
+        <li><a href="#resumen">Resumen del Proyecto</a></li>
+        <li>
+          <a href="#arquitectura">Arquitectura Actual</a>
+          <ul class="toc-sub">
+            <li><a href="#capas">Vista por Capas</a></li>
+            <li><a href="#rbac">Control de Acceso</a></li>
+            <li><a href="#estructura">Estructura de Archivos</a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="#lenguaje">Por qué Python y FastAPI</a>
+          <ul class="toc-sub">
+            <li><a href="#comparativa">Comparativa</a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="#mejoras">Roadmap de Mejoras</a>
+          <ul class="toc-sub">
+            <li><a href="#fase1">Fase 1 — Modularización</a></li>
+            <li><a href="#fase2">Fase 2 — Persistencia</a></li>
+            <li><a href="#fase3">Fase 3 — Calidad</a></li>
+            <li><a href="#fase4">Fase 4 — Escalabilidad</a></li>
+          </ul>
+        </li>
+        <li><a href="#conclusion">Conclusión</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="doc-main">
+
+    <!-- COVER -->
+    <div class="doc-cover">
+      <p class="cover-eyebrow">Documento Técnico · v1.0</p>
+      <h1 class="cover-title">Arquitectura CANGUARD</h1>
+      <p class="cover-sub">Sistema de Gestión de Unidades Caninas K9 — análisis de la arquitectura actual, justificación de la pila tecnológica y hoja de ruta de evolución.</p>
+      <div class="cover-meta">
+        <span>Agosto 2026</span>
+        <span>mfotero@109apps.com</span>
+        <span>FastAPI · Jinja2 SSR · MySQL</span>
+      </div>
+    </div>
+
+    <!-- ===== 01 RESUMEN ===== -->
+    <section class="doc-section" id="resumen">
+      <p class="section-eyebrow">01 — Contexto</p>
+      <h2>Resumen del Proyecto</h2>
+
+      <p>CANGUARD es una aplicación web de gestión operativa para unidades caninas K9. Centraliza el registro de caninos, guías, programas de entrenamiento, sesiones, video-análisis con inteligencia artificial, gestión de usuarios y alertas — todo bajo un modelo multi-entidad con control de acceso por roles.</p>
+
+      <p>La aplicación sigue el patrón de <strong>Server-Side Rendering (SSR)</strong>: el servidor Python genera HTML completo y lo entrega al navegador. No existe un frontend separado; toda la lógica de vistas vive en las plantillas Jinja2 y en el servidor FastAPI.</p>
+
+      <div class="callout">
+        <strong>Estado actual:</strong> 18 plantillas HTML, ~3 200 líneas de rutas en <code>main.py</code>, 70+ funciones SQL en <code>models.py</code>, integración con OpenAI API para transcripción y análisis de video.
+      </div>
+    </section>
+
+    <!-- ===== 02 ARQUITECTURA ===== -->
+    <section class="doc-section" id="arquitectura">
+      <p class="section-eyebrow">02 — Estructura</p>
+      <h2>Arquitectura Actual</h2>
+
+      <p>El sistema está organizado en cuatro capas funcionales que operan en cadena vertical: la solicitud HTTP entra por la capa de aplicación, se resuelve contra los datos y vuelve como HTML completamente renderizado.</p>
+
+      <!-- DIAGRAM -->
+      <h3 id="capas">Vista por Capas</h3>
+
+      <div class="arch-diagram">
+        <div class="arch-layer layer-1">
+          <p class="arch-layer-label">Capa 1 — Presentación (Navegador del Cliente)</p>
+          <div class="arch-chips">
+            <span class="arch-chip">Jinja2 Templates · 18 archivos</span>
+            <span class="arch-chip">Bootstrap 5</span>
+            <span class="arch-chip">CSS Custom Properties</span>
+            <span class="arch-chip">Chart.js 4.4</span>
+            <span class="arch-chip">SweetAlert2</span>
+            <span class="arch-chip">Bootstrap Icons</span>
+            <span class="arch-chip">Vanilla JavaScript</span>
+          </div>
+        </div>
+
+        <div class="arch-arrow">HTTP Request ↕ HTML Response (SSR)</div>
+
+        <div class="arch-layer layer-2">
+          <p class="arch-layer-label">Capa 2 — Aplicación (main.py + auth.py)</p>
+          <div class="arch-chips">
+            <span class="arch-chip">FastAPI Routes — monolítico</span>
+            <span class="arch-chip">Starlette SessionMiddleware</span>
+            <span class="arch-chip">auth.py — RBAC + timeout</span>
+            <span class="arch-chip">Jinja2Environment</span>
+            <span class="arch-chip">OpenAI Python Client</span>
+          </div>
+        </div>
+
+        <div class="arch-arrow">Llamadas Python directas a funciones</div>
+
+        <div class="arch-layer layer-3">
+          <p class="arch-layer-label">Capa 3 — Acceso a Datos (models.py + database.py)</p>
+          <div class="arch-chips">
+            <span class="arch-chip">~70 funciones SQL</span>
+            <span class="arch-chip">_query() — helper centralizado</span>
+            <span class="arch-chip">mysql-connector-python</span>
+            <span class="arch-chip">Queries parametrizadas</span>
+            <span class="arch-chip">Soft-delete (activo = 0)</span>
+          </div>
+        </div>
+
+        <div class="arch-arrow">TCP / MySQL Wire Protocol</div>
+
+        <div class="arch-layer layer-4">
+          <p class="arch-layer-label">Capa 4 — Base de Datos (MySQL 8.x)</p>
+          <div class="arch-chips">
+            <span class="arch-chip">MySQL 8.x</span>
+            <span class="arch-chip">~15 tablas</span>
+            <span class="arch-chip">Multi-tenant via id_entidad</span>
+            <span class="arch-chip">Esquema manual — sin migraciones</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAYER DESCRIPTIONS -->
+      <h3>Descripción de cada capa</h3>
+
+      <h4>Capa 1 — Presentación</h4>
+      <p>Las plantillas Jinja2 heredan de <code>layout.html</code>, que incluye el menú lateral, los CDN de Bootstrap/Chart.js/SweetAlert2 y el polling de notificaciones. Cada página extiende los bloques <code>content</code>, <code>extra_css</code> y <code>extra_js</code>. No hay bundler ni transpilación: el JavaScript vive directamente en etiquetas <code>&lt;script&gt;</code> dentro de cada plantilla.</p>
+
+      <h4>Capa 2 — Aplicación</h4>
+      <p><code>main.py</code> concentra todas las rutas. Cada ruta sigue el patrón <em>guard → filtro de entidad → lógica → render</em>: verifica sesión activa con <code>redirigir_si_no_autenticado()</code>, aplica el filtro multi-tenant (<code>id_ent = None if es_super_admin else id_entidad_sesion</code>), llama funciones de modelo y retorna un <code>TemplateResponse</code> con el contexto necesario.</p>
+
+      <h4>Capa 3 — Acceso a Datos</h4>
+      <p>Toda interacción con MySQL pasa por la función privada <code>_query(sql, params, write=False)</code> en <code>models.py</code>, que abre la conexión, ejecuta y la cierra. Las funciones de modelo son envoltorios SQL explícitos sin ORM. El soft-delete (<code>activo=0</code>) es el patrón universal para borrado lógico.</p>
+
+      <h4>Capa 4 — Base de Datos</h4>
+      <p>MySQL organiza los datos bajo el concepto de <em>entidad</em> (<code>id_entidad</code>): cada registro de canino, usuario, programa o sesión pertenece a una entidad. Los <code>super_admin</code> ven todo; los <code>admin_entidad</code> solo ven sus registros. El esquema se gestiona manualmente — no hay historial de cambios ni rollback automatizado.</p>
+
+      <!-- RBAC -->
+      <h3 id="rbac">Control de Acceso (RBAC)</h3>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rol</th>
+              <th>Alcance</th>
+              <th>Restricciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="tag">super_admin</span></td>
+              <td>Global — todas las entidades</td>
+              <td>Sin restricciones. Puede borrar programas, sesiones, gestionar cualquier entidad.</td>
+            </tr>
+            <tr>
+              <td><span class="tag">admin_entidad</span></td>
+              <td>Solo su entidad</td>
+              <td>No puede borrar programas ni sesiones. No accede a otras entidades.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>La sesión vive en una cookie firmada con <code>SessionMiddleware</code> de Starlette. La inactividad se controla comparando el timestamp de la última actividad contra <code>SESSION_LIFETIME</code> (variable de entorno, defecto 3 600 segundos).</p>
+
+      <!-- FILE TREE -->
+      <h3 id="estructura">Estructura de Archivos</h3>
+
+      <div class="ftree">
+<span class="ft-d">backend/</span>
+├── <span class="ft-d">app/</span>
+│   ├── main.py          <span class="ft-c"># Todas las rutas FastAPI — monolítico (~3 200 líneas)</span>
+│   ├── models.py        <span class="ft-c"># Funciones SQL (~70 funciones, raw queries)</span>
+│   ├── database.py      <span class="ft-c"># Conexión MySQL via mysql-connector, env-driven</span>
+│   ├── auth.py          <span class="ft-c"># Sesión, helpers RBAC, timeout de inactividad</span>
+│   ├── <span class="ft-d">templates/</span>       <span class="ft-c"># 18 plantillas Jinja2</span>
+│   │   ├── layout.html  <span class="ft-c"># Base: nav lateral, CDNs, polling notificaciones</span>
+│   │   ├── dashboard.html
+│   │   ├── caninos.html
+│   │   ├── usuarios.html
+│   │   ├── cursos.html
+│   │   ├── cursos_sesiones.html
+│   │   ├── vision_ia.html
+│   │   └── ...          <span class="ft-c"># 11 plantillas adicionales</span>
+│   └── <span class="ft-d">static/</span>          <span class="ft-c"># Imágenes, sonidos de alerta, videos subidos</span>
+└── requirements.txt
+      </div>
+    </section>
+
+    <!-- ===== 03 LENGUAJE ===== -->
+    <section class="doc-section" id="lenguaje">
+      <p class="section-eyebrow">03 — Decisión Tecnológica</p>
+      <h2>Por qué Python y FastAPI</h2>
+
+      <p>La elección de Python con FastAPI no fue arbitraria. Tres factores del proyecto definen la decisión:</p>
+
+      <ul>
+        <li><strong>Integración con IA:</strong> El módulo Visión IA consume la API de OpenAI. Python domina este ecosistema — las librerías de IA (OpenAI SDK, Whisper, LangChain, etc.) tienen soporte de primera clase solo en Python. Con Node.js o PHP, esta integración habría requerido wrappers no oficiales.</li>
+        <li><strong>Velocidad de prototipado:</strong> FastAPI genera documentación OpenAPI automática, valida tipos con Pydantic y no impone ORM, estructura de carpetas ni convenciones rígidas desde el primer día. Django hubiera añadido complejidad (admin panel, ORM, migrations) que el equipo no necesitaba al inicio.</li>
+        <li><strong>Rendimiento async:</strong> FastAPI usa ASGI y es async-first. Su throughput en cargas I/O-bound (consultas a BD, llamadas a OpenAI) es comparable a Node.js y superior a Django/Flask en configuración equivalente.</li>
+      </ul>
+
+      <h3 id="comparativa">Comparativa de frameworks</h3>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Framework</th>
+              <th>Async nativo</th>
+              <th>Ecosistema IA</th>
+              <th>Curva inicial</th>
+              <th>Docs automáticas</th>
+              <th>SSR fácil</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="sel">
+              <td><span class="tag">FastAPI ✓</span></td>
+              <td class="c-yes">ASGI nativo</td>
+              <td class="c-yes">Excelente</td>
+              <td>Media</td>
+              <td class="c-yes">OpenAPI / Swagger</td>
+              <td class="c-yes">Jinja2 integrado</td>
+            </tr>
+            <tr>
+              <td>Django</td>
+              <td class="c-mid">Parcial (ASGI opt.)</td>
+              <td>Bueno</td>
+              <td class="c-mid">Alta</td>
+              <td class="c-no">Manual</td>
+              <td class="c-yes">Templates propios</td>
+            </tr>
+            <tr>
+              <td>Flask</td>
+              <td class="c-no">No (sync)</td>
+              <td>Bueno</td>
+              <td>Baja</td>
+              <td class="c-no">Manual</td>
+              <td class="c-yes">Jinja2</td>
+            </tr>
+            <tr>
+              <td>Express (Node.js)</td>
+              <td class="c-yes">Event loop</td>
+              <td class="c-mid">Limitado</td>
+              <td>Media</td>
+              <td class="c-no">Manual</td>
+              <td class="c-mid">EJS / Pug</td>
+            </tr>
+            <tr>
+              <td>Laravel (PHP)</td>
+              <td class="c-no">No</td>
+              <td class="c-no">Muy limitado</td>
+              <td>Media</td>
+              <td class="c-mid">Parcial</td>
+              <td class="c-yes">Blade</td>
+            </tr>
+            <tr>
+              <td>Spring Boot (Java)</td>
+              <td class="c-yes">Reactor / WebFlux</td>
+              <td class="c-mid">Moderado</td>
+              <td class="c-mid">Alta</td>
+              <td class="c-yes">Swagger</td>
+              <td class="c-mid">Thymeleaf</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <strong>Síntesis:</strong> FastAPI ofrece la mejor combinación de desarrollo rápido, async real, ecosistema IA y documentación automática para los requisitos de CANGUARD. Django es la alternativa más cercana, pero su peso (ORM obligatorio, admin panel, convenciones estrictas) lo hace excesivo para un equipo pequeño con un dominio bien delimitado.
+      </div>
+
+      <h3>Lo que funciona bien de la arquitectura actual</h3>
+      <ul>
+        <li>El SSR con Jinja2 es simple de mantener: un cambio en la plantilla se ve inmediatamente sin rebuild ni bundler.</li>
+        <li>Las queries parametrizadas en <code>_query()</code> previenen inyección SQL de forma centralizada — no hay riesgo de concatenación de strings insegura.</li>
+        <li>El soft-delete universal (<code>activo=0</code>) preserva historia sin papeleras complejas ni referencias rotas.</li>
+        <li>El modelo multi-tenant via <code>id_entidad</code> funciona bien mientras las entidades no superen los cientos.</li>
+        <li>La integración con OpenAI es directa y mantenible gracias al SDK oficial de Python.</li>
+      </ul>
+    </section>
+
+    <!-- ===== 04 MEJORAS ===== -->
+    <section class="doc-section" id="mejoras">
+      <p class="section-eyebrow">04 — Evolución</p>
+      <h2>Roadmap de Mejoras</h2>
+
+      <p>Las mejoras están ordenadas por urgencia e impacto. Las dos primeras fases eliminan deuda técnica activa que crece con cada nueva funcionalidad. Las últimas dos preparan el sistema para crecimiento real en usuarios y equipo.</p>
+
+      <div class="roadmap">
+
+        <!-- FASE 1 -->
+        <div class="road-item" id="fase1">
+          <div class="road-left">
+            <span class="road-horizon">Corto plazo</span>
+            <p class="road-title">Modularización</p>
+          </div>
+          <div class="road-right">
+            <h4>Problema actual</h4>
+            <ul>
+              <li><code>main.py</code> concentra todas las rutas (~3 200 líneas) — difícil de navegar, probar y mantener en equipo.</li>
+              <li>La lógica de negocio está mezclada con la lógica HTTP (validaciones, cálculos y renders en la misma función).</li>
+            </ul>
+            <h4>Qué hacer</h4>
+            <ul>
+              <li>Crear <code>routers/</code> con un <code>APIRouter</code> por dominio: <code>caninos.py</code>, <code>cursos.py</code>, <code>usuarios.py</code>, <code>vision.py</code>, <code>entidades.py</code>, <code>notificaciones.py</code>.</li>
+              <li>Extraer lógica de negocio a <code>services/</code> — cada ruta solo guarda, delega y renderiza.</li>
+              <li>Centralizar configuración en <code>config.py</code> con <code>pydantic-settings</code> — fallo claro si falta una variable de entorno.</li>
+              <li>El <code>main.py</code> resultante queda en &lt;100 líneas: solo registra routers y middleware.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FASE 2 -->
+        <div class="road-item" id="fase2">
+          <div class="road-left">
+            <span class="road-horizon">Mediano plazo</span>
+            <p class="road-title">Persistencia Robusta</p>
+          </div>
+          <div class="road-right">
+            <h4>Problema actual</h4>
+            <ul>
+              <li>Sin versionado de esquema: los cambios de BD se aplican manualmente — sin historial, sin rollback.</li>
+              <li><code>_query()</code> abre y cierra una conexión por llamada — ineficiente bajo carga concurrente.</li>
+              <li>Los diccionarios retornados por MySQL son frágiles: renombrar una columna rompe código silenciosamente.</li>
+            </ul>
+            <h4>Qué hacer</h4>
+            <ul>
+              <li>Introducir <strong>SQLAlchemy 2.x</strong> con modelos declarativos — tipado explícito, relaciones documentadas en código.</li>
+              <li>Agregar <strong>Alembic</strong> para migraciones versionadas: <code>alembic upgrade head</code> aplica cambios reproducibles en cualquier ambiente.</li>
+              <li>Configurar un <strong>connection pool</strong> explícito en el engine de SQLAlchemy (<code>pool_size</code>, <code>max_overflow</code>).</li>
+              <li>Mantener el soft-delete (<code>activo=0</code>) como mixin reutilizable en los modelos.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FASE 3 -->
+        <div class="road-item" id="fase3">
+          <div class="road-left">
+            <span class="road-horizon">Mediano plazo</span>
+            <p class="road-title">Calidad y Despliegue</p>
+          </div>
+          <div class="road-right">
+            <h4>Problema actual</h4>
+            <ul>
+              <li>Sin tests automatizados: cualquier refactor es un riesgo ciego. No hay forma de detectar regresiones.</li>
+              <li>El entorno de desarrollo no está containerizado — diferencias entre máquinas pueden romper el proyecto silenciosamente.</li>
+              <li>No hay pipeline CI/CD formal que bloquee código roto antes de llegar a producción.</li>
+            </ul>
+            <h4>Qué hacer</h4>
+            <ul>
+              <li><strong>pytest</strong> + <code>httpx.AsyncClient</code> (TestClient de FastAPI) para tests de integración de rutas críticas (login, RBAC, caninos, cursos).</li>
+              <li><strong>Docker</strong> + <code>docker-compose.yml</code> con servicios: <code>app</code> (FastAPI) + <code>db</code> (MySQL) + (futuro) <code>redis</code>.</li>
+              <li><strong>GitHub Actions</strong> con pipeline: lint (<code>ruff</code>) → tests (<code>pytest</code>) → build image → deploy según rama.</li>
+              <li>Variables de entorno validadas al arranque con <code>pydantic-settings</code> — error explícito si falta <code>DB_HOST</code>, <code>SECRET_KEY</code>, etc.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FASE 4 -->
+        <div class="road-item" id="fase4">
+          <div class="road-left">
+            <span class="road-horizon">Largo plazo</span>
+            <p class="road-title">Escalabilidad</p>
+          </div>
+          <div class="road-right">
+            <h4>Cuándo aplica</h4>
+            <ul>
+              <li>El número de entidades supera las decenas y los reportes del dashboard se vuelven lentos.</li>
+              <li>La transcripción de videos con OpenAI bloquea el servidor varios segundos por solicitud.</li>
+              <li>Se necesita una app móvil o integraciones con sistemas externos (ERP, plataformas de terceros).</li>
+            </ul>
+            <h4>Qué hacer</h4>
+            <ul>
+              <li><strong>Redis</strong> para caché de queries frecuentes (listas de caninos, programas) y para almacenar sesiones fuera del proceso — permite múltiples instancias del servidor.</li>
+              <li><strong>Celery + Redis</strong> como broker de tareas: mover la transcripción de OpenAI a un worker en background — el usuario recibe un ID de tarea y consulta el estado de forma asíncrona.</li>
+              <li><strong>Separar una API REST</strong> en <code>/api/v1/</code> con respuestas JSON, para que el SSR conviva con integraciones externas o una futura app móvil sin reescribir el servidor.</li>
+              <li>Evaluar <strong>HTMX</strong> antes de saltar a React/Vue — permite actualizar fragmentos de HTML desde el servidor sin un SPA completo, manteniendo la simplicidad del SSR.</li>
+              <li><strong>Sentry</strong> para captura de errores en producción + logs estructurados en JSON para observabilidad real.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== 05 CONCLUSIÓN ===== -->
+    <section class="doc-section" id="conclusion">
+      <p class="section-eyebrow">05 — Síntesis</p>
+      <h2>Conclusión</h2>
+
+      <p>CANGUARD tiene una base técnica sólida para su estado actual. FastAPI + Jinja2 SSR es una elección bien justificada, las queries parametrizadas garantizan seguridad frente a inyección SQL, y el modelo multi-tenant funciona de forma predecible. El punto de quiebre más cercano no es el lenguaje ni el framework — es la concentración de todo el código de rutas en <code>main.py</code> y la ausencia de tests automáticos.</p>
+
+      <p>Ambos problemas son resolubles en horas de trabajo, no en semanas de reescritura. Hacerlos ahora, cuando el codebase todavía es navegable por una sola persona, cuesta mucho menos que hacerlos cuando el equipo sea mayor o la base de usuarios sea real.</p>
+
+      <div class="callout">
+        <strong>Prioridad inmediata:</strong> Separar <code>main.py</code> en <code>APIRouter</code> por dominio (Fase 1) y agregar tests básicos para las rutas de autenticación y RBAC (Fase 3). Esas dos acciones eliminan los riesgos más activos sin tocar la arquitectura ni la base de datos.
+      </div>
+    </section>
+
+  </main>
+</div>

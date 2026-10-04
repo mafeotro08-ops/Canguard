@@ -1,0 +1,301 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<style>
+    .back-link { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); text-decoration:none; margin-bottom:18px; transition:.15s; }
+    .back-link:hover { color:var(--primary); }
+
+    .ia-hero { display:flex; align-items:center; gap:18px; background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; padding:20px 24px; margin-bottom:24px; box-shadow:var(--card-shadow); border-left:5px solid var(--primary); }
+    .ia-hero-info { flex:1; }
+    .ia-hero-titulo { font-size:20px; font-weight:800; color:var(--text-main); }
+    .ia-hero-sub { font-size:12px; color:var(--text-muted); margin-top:3px; }
+
+    .btn-registrar { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; background:var(--primary); color:#fff; font-size:12px; font-weight:700; letter-spacing:.6px; border:none; border-radius:8px; cursor:pointer; text-transform:uppercase; transition:.18s; }
+    .btn-registrar:hover { opacity:.88; transform:translateY(-1px); }
+
+    .table-wrap { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; box-shadow:var(--card-shadow); overflow:hidden; overflow-x:auto; }
+    .ia-table { width:100%; border-collapse:collapse; min-width:650px; }
+    .ia-table thead th { padding:11px 16px; font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--text-muted); background:var(--surface-1); border-bottom:1px solid var(--card-border); }
+    .ia-table tbody tr { border-bottom:1px solid var(--card-border); transition:background .15s; }
+    .ia-table tbody tr:last-child { border-bottom:none; }
+    .ia-table tbody tr:hover { background:var(--surface-1); }
+    .ia-table td { padding:13px 16px; font-size:13px; color:var(--text-main); vertical-align:middle; }
+
+    .td-canino { display:flex; align-items:center; gap:10px; }
+    .mini-foto { width:34px; height:34px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); }
+    .mini-ph { width:34px; height:34px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--text-muted); }
+    .can-nombre { font-weight:700; font-size:13px; }
+    .can-raza { font-size:11px; color:var(--text-muted); font-style:italic; }
+
+    .badge-res { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; }
+    .badge-correcto       { background:#dcfce7; color:#16a34a; }
+    .badge-falsa_alarma   { background:#fee2e2; color:#991b1b; }
+    .badge-no_detecto     { background:#fef9c3; color:#854d0e; }
+    .badge-none           { background:var(--surface-2); color:var(--text-muted); }
+
+    .confianza-bar { display:flex; align-items:center; gap:8px; }
+    .bar-wrap { width:80px; height:6px; background:var(--surface-2); border-radius:10px; overflow:hidden; }
+    .bar-fill { height:100%; border-radius:10px; background:var(--primary); }
+
+    .btn-del { padding:5px 10px; border:1px solid #ef4444; background:transparent; color:#ef4444; border-radius:6px; font-size:11px; cursor:pointer; transition:.18s; }
+    .btn-del:hover { background:#ef4444; color:#fff; }
+
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
+    .empty-state i { font-size:48px; margin-bottom:12px; display:block; color:var(--primary); }
+
+    .archivo-link { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--primary); text-decoration:none; }
+    .archivo-link:hover { text-decoration:underline; }
+
+    /* Modal */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal-box { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px 14px; border-bottom:1px solid var(--card-border); border-top:4px solid var(--primary); border-radius:14px 14px 0 0; }
+    .modal-header h2 { font-size:16px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:8px; }
+    .modal-close { background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); }
+    .modal-close:hover { color:#ef4444; }
+    .modal-body { padding:22px; display:flex; flex-direction:column; gap:14px; }
+    .modal-footer { padding:14px 22px; border-top:1px solid var(--card-border); display:flex; justify-content:flex-end; gap:10px; }
+    .form-group { display:flex; flex-direction:column; gap:5px; }
+    .form-group label { font-size:11px; font-weight:600; color:var(--text-muted); letter-spacing:.4px; text-transform:uppercase; }
+    .form-group input, .form-group select, .form-group textarea { padding:9px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); width:100%; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline:none; border-color:var(--primary); }
+    .form-group textarea { resize:vertical; min-height:70px; }
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .req { color:#ef4444; }
+    .btn-cancel { padding:9px 18px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:13px; cursor:pointer; }
+    .btn-cancel:hover { background:var(--surface-2); }
+    .btn-save { padding:9px 22px; background:var(--primary); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; }
+    .btn-save:hover { opacity:.88; }
+
+    .btn-file-ia { display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border:1.5px dashed var(--border); border-radius:8px; background:var(--surface-1); font-size:12px; color:var(--text-muted); cursor:pointer; transition:.18s; }
+    .btn-file-ia:hover { border-color:var(--primary); color:var(--primary); }
+    .btn-file-ia.has-file { border-color:#22c55e; color:#16a34a; }
+
+    @media(max-width:540px) { .form-grid-2 { grid-template-columns:1fr; } }
+</style>
+
+<a href="/cursos/{{ curso.key }}/sesiones" class="back-link">
+    <i class="bi bi-arrow-left-circle-fill"></i> Volver a sesiones — {{ curso.nombre }}
+</a>
+
+<div class="ia-hero">
+    <div style="width:46px; height:46px; border-radius:10px; background:var(--surface-1); border:1px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--primary); flex-shrink:0;">
+        <i class="bi bi-robot"></i>
+    </div>
+    <div class="ia-hero-info">
+        <div class="ia-hero-titulo">Registro de Resultados — {{ curso.nombre }}</div>
+        <div class="ia-hero-sub">{{ registros | length }} resultado{{ 's registrados' if registros | length != 1 else ' registrado' }}</div>
+    </div>
+    <button class="btn-registrar" onclick="abrirModal()">
+        <i class="bi bi-plus-circle-fill"></i> Registrar resultado
+    </button>
+</div>
+
+{% if flash_ok %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({ icon:'success', title:'¡Listo!', text:{{ flash_ok | tojson }}, timer:2500, showConfirmButton:false, toast:true, position:'top-end' });
+});
+</script>
+{% endif %}
+
+{% if registros %}
+<div class="table-wrap">
+<table class="ia-table">
+    <thead>
+        <tr>
+            <th>Canino</th>
+            {% if session.rol == 'super_admin' %}<th>Entidad</th>{% endif %}
+            <th>Fecha</th>
+            <th>Resultado</th>
+            <th>Confianza</th>
+            <th>Observaciones</th>
+            <th>Archivo</th>
+            <th style="text-align:center;">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for reg in registros %}
+    <tr>
+        <td>
+            <div class="td-canino">
+                {% if reg.foto_path %}
+                <img src="/static/{{ reg.foto_path }}" class="mini-foto">
+                {% else %}
+                <div class="mini-ph"><i class="bi bi-shield-fill"></i></div>
+                {% endif %}
+                <div>
+                    <div class="can-nombre">{{ reg.nombre_canino }}</div>
+                    <div class="can-raza">{{ reg.raza }}</div>
+                </div>
+            </div>
+        </td>
+        {% if session.rol == 'super_admin' %}
+        <td style="font-size:12px;">{{ reg.nombre_entidad or '—' }}</td>
+        {% endif %}
+        <td>{{ reg.fecha }}</td>
+        <td>
+            {% if reg.resultado %}
+            <span class="badge-res badge-{{ reg.resultado }}">
+                {{ {'correcto':'✓ Correcto','falsa_alarma':'⚠ Falsa alarma','no_detecto':'✕ No detectó'}.get(reg.resultado, reg.resultado) }}
+            </span>
+            {% else %}
+            <span class="badge-res badge-none">Sin definir</span>
+            {% endif %}
+        </td>
+        <td>
+            {% if reg.confianza is not none %}
+            <div class="confianza-bar">
+                <div class="bar-wrap"><div class="bar-fill" style="width:{{ reg.confianza }}%;"></div></div>
+                <span style="font-size:12px; font-weight:700;">{{ reg.confianza }}%</span>
+            </div>
+            {% else %}—{% endif %}
+        </td>
+        <td style="font-size:12px; max-width:180px;">{{ reg.observaciones or '—' }}</td>
+        <td>
+            {% if reg.archivo_path %}
+            <a href="/static/{{ reg.archivo_path }}" target="_blank" class="archivo-link">
+                <i class="bi bi-file-earmark-arrow-down-fill"></i> Ver archivo
+            </a>
+            {% else %}—{% endif %}
+        </td>
+        <td style="text-align:center;">
+            <form method="POST" action="/cursos/ia/{{ reg.id }}/eliminar" style="display:inline"
+                  onsubmit="return confirm('¿Eliminar este registro?')">
+                <button type="submit" class="btn-del"><i class="bi bi-trash3-fill"></i></button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-robot"></i>
+    <p>No hay resultados registrados aún.<br>
+    Haz clic en <strong>Registrar resultado</strong> para añadir el primero.</p>
+</div>
+{% endif %}
+
+
+<!-- ══════════ MODAL REGISTRAR RESULTADO ══════════ -->
+<div class="modal-overlay" id="modalIA">
+<div class="modal-box">
+    <div class="modal-header">
+        <h2><i class="bi bi-robot" style="color:var(--primary);"></i> Registrar Resultado Final</h2>
+        <button class="modal-close" onclick="cerrarModal()">&#x2715;</button>
+    </div>
+    <form method="POST" action="/cursos/{{ curso.key }}/ia" enctype="multipart/form-data">
+    <div class="modal-body">
+
+        {% if session.rol == 'super_admin' %}
+        <div class="form-group">
+            <label>Entidad <span class="req">*</span></label>
+            <select name="id_entidad" id="sEntidad" required onchange="cargarCaninos()">
+                <option value="">— Seleccionar entidad —</option>
+                {% for ent in entidades %}
+                <option value="{{ ent.id }}">{{ ent.razon_social }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="id_entidad" value="{{ session.id_entidad }}">
+        {% endif %}
+
+        <div class="form-group">
+            <label>Canino <span class="req">*</span></label>
+            <select name="id_canino" id="sCanino" required>
+                <option value="">— Seleccionar canino —</option>
+                {% if session.rol != 'super_admin' %}
+                {% for c in caninos %}
+                <option value="{{ c.id }}">{{ c.nombre }} ({{ c.raza }})</option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label>Fecha <span class="req">*</span></label>
+                <input type="date" name="fecha" required>
+            </div>
+            <div class="form-group">
+                <label>Resultado</label>
+                <select name="resultado">
+                    <option value="">— Sin definir —</option>
+                    <option value="correcto">✓ Correcto</option>
+                    <option value="falsa_alarma">⚠ Falsa alarma</option>
+                    <option value="no_detecto">✕ No detectó</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Nivel de confianza <span style="font-weight:400; text-transform:none; color:var(--text-muted);">(0–100%)</span></label>
+            <input type="number" name="confianza" min="0" max="100" placeholder="Ej: 87">
+        </div>
+
+        <div class="form-group">
+            <label>Observaciones</label>
+            <textarea name="observaciones" placeholder="Condiciones del análisis, comportamiento del canino…"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Archivo <span style="font-weight:400; text-transform:none; color:var(--text-muted);">(imagen o video, opcional)</span></label>
+            <input type="file" name="archivo" id="iaArchivo" accept="image/*,video/*" style="display:none" onchange="prevArchivo(this)">
+            <label for="iaArchivo" class="btn-file-ia" id="iaArchivoLabel">
+                <i class="bi bi-file-earmark-arrow-up-fill"></i> Seleccionar archivo
+            </label>
+        </div>
+
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+        <button type="submit" class="btn-save">
+            <i class="bi bi-check-circle-fill"></i> Guardar resultado
+        </button>
+    </div>
+    </form>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const CANINOS_POR_ENTIDAD = {};
+{% for c in caninos %}{% if c.id_entidad %}
+if (!CANINOS_POR_ENTIDAD[{{ c.id_entidad }}]) CANINOS_POR_ENTIDAD[{{ c.id_entidad }}] = [];
+CANINOS_POR_ENTIDAD[{{ c.id_entidad }}].push({ id: {{ c.id }}, nombre: {{ c.nombre | tojson }}, raza: {{ (c.raza or '') | tojson }} });
+{% endif %}{% endfor %}
+
+function abrirModal() { document.getElementById('modalIA').classList.add('open'); }
+function cerrarModal() { document.getElementById('modalIA').classList.remove('open'); }
+document.getElementById('modalIA').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModal();
+});
+
+function cargarCaninos() {
+    var idEnt = document.getElementById('sEntidad')?.value;
+    var sel   = document.getElementById('sCanino');
+    sel.innerHTML = '<option value="">— Seleccionar canino —</option>';
+    if (idEnt && CANINOS_POR_ENTIDAD[idEnt]) {
+        CANINOS_POR_ENTIDAD[idEnt].forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.nombre + ' (' + c.raza + ')';
+            sel.appendChild(opt);
+        });
+    }
+}
+
+function prevArchivo(input) {
+    if (input.files && input.files[0]) {
+        document.getElementById('iaArchivoLabel').classList.add('has-file');
+        document.getElementById('iaArchivoLabel').innerHTML =
+            '<i class="bi bi-check-circle-fill"></i> ' + input.files[0].name;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<!--
+    La clase del <html> cambia según el rol:
+    · theme-dark  → super_admin  (oscuro, táctico)
+    · theme-light → admin_entidad (blanco, limpio)
+-->
+<html lang="es" class="{% if session.rol == 'super_admin' %}theme-dark{% else %}theme-light{% endif %}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CANGUARD - Admin Panel</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="shortcut icon" href="https://placehold.co/32x32/FFD700/000000?text=K9">
+    <style>
+        /* ════════════════════════════════════════════════════════
+           VARIABLES POR TEMA
+           Las clases .theme-dark / .theme-light se aplican al <html>
+           y todos los hijos las heredan automáticamente via var()
+        ════════════════════════════════════════════════════════ */
+
+        /* ── TEMA SUPER ADMIN — fondo gris muy claro ─────────── */
+        html.theme-dark {
+            --primary:            #b8860b;
+            --primary-hover:      #d4a017;
+            --sidebar-bg:         #0f172a;
+            --sidebar-border:     rgba(212,160,23,0.2);
+            --content-bg:         #f4f6fa;
+            --card-bg:            #ffffff;
+            --card-border:        #dce3ef;
+            --card-shadow:        0 2px 14px rgba(0,0,0,0.07);
+            --text-main:          #1a2540;
+            --text-muted:         #5a6b84;
+            --border:             #dce3ef;
+            --surface-1:          #f0f3fa;
+            --surface-2:          #eaeff8;
+            --surface-3:          #dde4f2;
+            --input-focus-bg:     #ffffff;
+            --input-focus-border: #b8860b;
+            --info-bg:            #eff8ff;
+            --info-border:        #bfdbfe;
+            --info-text:          #1d4ed8;
+            --badge-ok-bg:        #dcfce7;
+            --badge-ok-text:      #16a34a;
+            --nav-text:           rgba(255,255,255,0.6);
+            --nav-hover-bg:       rgba(212,160,23,0.12);
+            --nav-hover-text:     #ffd700;
+        }
+
+        /* ── TEMA CLARO — Admin Entidad (el cliente) ──────────── */
+        html.theme-light {
+            --primary:        #e6b800;
+            --primary-hover:  #ffd700;
+            --sidebar-bg:     #0d1b2a;
+            --sidebar-border: rgba(230,184,0,0.2);
+            --content-bg:     #f0f4f8;
+            --card-bg:        #ffffff;
+            --card-border:    #dde3ec;
+            --card-shadow:    0 2px 12px rgba(0,0,0,0.06);
+            --text-main:      #1e293b;
+            --text-muted:     #64748b;
+            --border:         #dde3ec;
+            --surface-1:      #f8fafc;                  /* bg inputs */
+            --surface-2:      #f8fafc;                  /* thead / alt */
+            --surface-3:      #f1f5f9;                  /* row hover */
+            --input-focus-bg: #ffffff;
+            --input-focus-border: #e6b800;
+            --info-bg:        #f0f9ff;
+            --info-border:    #bae6fd;
+            --info-text:      #0369a1;
+            --badge-ok-bg:    #dcfce7;
+            --badge-ok-text:  #16a34a;
+            --nav-text:       rgba(255,255,255,0.6);
+            --nav-hover-bg:   rgba(230,184,0,0.1);
+            --nav-hover-text: #ffd700;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           BASE
+        ════════════════════════════════════════════════════════ */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            display: flex;
+            font-family: "Segoe UI", sans-serif;
+            background: var(--content-bg);
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           GRID ANIMADO — fondo del área de contenido
+        ════════════════════════════════════════════════════════ */
+        @keyframes moveAdminGrid {
+            from { background-position: 0 0; }
+            to   { background-position: 0 500px; }
+        }
+
+        /* Contenedor fijo del grid (queda detrás del contenido) */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 260px;   /* coincide con el ancho del sidebar */
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
+            background: var(--content-bg);
+        }
+
+        /* El grid con perspectiva, igual al de la pantalla de login */
+        .bg-grid::before {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-image:
+                linear-gradient(rgba(184, 134, 11, 0.07) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(184, 134, 11, 0.07) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg);
+            animation: moveAdminGrid 16s linear infinite;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           SIDEBAR — siempre oscuro en ambos temas
+        ════════════════════════════════════════════════════════ */
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--sidebar-border);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            z-index: 10;  /* sobre el grid animado */
+        }
+
+        .sidebar-header {
+            padding: 26px 28px;
+            text-align: center;
+            border-bottom: 1px solid var(--sidebar-border);
+        }
+        .sidebar-header h2 {
+            font-size: 20px;
+            letter-spacing: 5px;
+            color: #fff;
+            font-weight: 900;
+        }
+        .sidebar-header h2 span { color: var(--primary); }
+        .sidebar-user {
+            margin-top: 12px;
+        }
+        .sidebar-user .u-name {
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .sidebar-user .u-role {
+            color: var(--primary);
+            font-size: 10px;
+            letter-spacing: 2px;
+            margin-top: 3px;
+        }
+
+        .nav-menu { flex-grow: 1; padding: 14px 0; overflow-y: auto; }
+
+        .nav-item {
+            padding: 13px 26px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--nav-text);
+            text-decoration: none;
+            font-size: 11px;
+            letter-spacing: 0.8px;
+            transition: .18s;
+            border-left: 3px solid transparent;
+        }
+        .nav-item:hover,
+        .nav-item.active {
+            background: var(--nav-hover-bg);
+            color: var(--nav-hover-text);
+            border-left-color: var(--primary);
+        }
+        .nav-item i { font-size: 15px; flex-shrink: 0; }
+
+        /* Badge de notificaciones */
+        .notif-badge {
+            margin-left: auto;
+            background: #ef4444;
+            color: #fff;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 7px;
+            min-width: 20px;
+            text-align: center;
+            line-height: 1.4;
+            display: none;
+            animation: pulse-badge .8s ease-in-out infinite alternate;
+        }
+        @keyframes pulse-badge { from { opacity:1; } to { opacity:.65; } }
+
+        /* Nav item con alertas activas */
+        .nav-item.has-alert {
+            border-left-color: #ef4444 !important;
+            color: #ef4444 !important;
+            background: rgba(239,68,68,0.10) !important;
+        }
+        .nav-item.has-alert i { color: #ef4444; }
+
+        .nav-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--sidebar-border);
+        }
+
+        /* ════════════════════════════════════════════════════════
+           ÁREA DE CONTENIDO
+        ════════════════════════════════════════════════════════ */
+        .main-content {
+            flex-grow: 1;
+            padding: 40px;
+            overflow-y: auto;
+            position: relative;
+            background: transparent;  /* deja ver el .bg-grid fijo detrás */
+            min-height: 100vh;
+            z-index: 1;
+        }
+
+        .content-inner {
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ════════════════════════════════════════════════════════
+           DISTINCIÓN VISUAL SUPER ADMIN vs ADMIN ENTIDAD
+           Solo diferencias que no afectan legibilidad en fondo claro
+        ════════════════════════════════════════════════════════ */
+
+        /* Borde izquierdo dorado en encabezado de página — solo super admin */
+        html.theme-dark .page-header h1,
+        html.theme-dark .FormHeader h1 {
+            border-left: 4px solid var(--primary);
+            padding-left: 12px;
+        }
+
+        /* Badge activo — usa las variables que ya son correctas en ambos temas */
+        .badge-activo {
+            background: var(--badge-ok-bg);
+            color: var(--badge-ok-text);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Grid animado con perspectiva (detrás del contenido, igual al login) -->
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>CAN<span>GUARD</span></h2>
+            {% if session.nombre_usuario %}
+            <div class="sidebar-user">
+                <div class="u-name">{{ session.nombre_usuario }}</div>
+                <div class="u-role">
+                    {% if session.rol == 'super_admin' %}&#9670; SUPER ADMIN{% else %}&#9670; ADMIN ENTIDAD{% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <nav class="nav-menu">
+            <a href="/index" class="nav-item"><i class="bi bi-speedometer2"></i> DASHBOARD</a>
+
+            {% if session.rol == 'super_admin' %}
+                <a href="/entidades"         class="nav-item {% if request.url.path == '/entidades' %}active{% endif %}"><i class="bi bi-buildings-fill"></i> ENTIDADES</a>
+                <a href="/usuarios"          class="nav-item {% if request.url.path == '/usuarios' %}active{% endif %}"><i class="bi bi-people-fill"></i> USUARIOS</a>
+                <a href="/gestion-guias"     class="nav-item {% if request.url.path == '/gestion-guias' %}active{% endif %}"><i class="bi bi-person-badge-fill"></i> GUÍAS K9</a>
+                <a href="/caninos"           class="nav-item {% if request.url.path == '/caninos' %}active{% endif %}"><i class="bi bi-shield-fill"></i> CANINOS K9</a>
+                <a href="/salud-canina"      class="nav-item {% if request.url.path == '/salud-canina' %}active{% endif %}"><i class="bi bi-heart-pulse-fill"></i> SALUD CANINA</a>
+                <a href="/geolocalizacion"   class="nav-item {% if request.url.path == '/geolocalizacion' %}active{% endif %}"><i class="bi bi-geo-alt-fill"></i> GEOLOCALIZACIÓN</a>
+                <a href="/cursos"            class="nav-item {% if request.url.path == '/cursos' %}active{% endif %}"><i class="bi bi-mortarboard-fill"></i> ACADEMIA K9</a>
+                <a href="/notificaciones"    class="nav-item {% if request.url.path == '/notificaciones' %}active{% endif %}" id="navNotif"><i class="bi bi-bell-fill"></i> NOTIFICACIONES<span class="notif-badge" id="notifBadge"></span></a>
+            {% else %}
+                <a href="/usuarios"          class="nav-item {% if request.url.path == '/usuarios' %}active{% endif %}"><i class="bi bi-people-fill"></i> MIS USUARIOS</a>
+                <a href="/gestion-guias"     class="nav-item {% if request.url.path == '/gestion-guias' %}active{% endif %}"><i class="bi bi-person-badge-fill"></i> GUÍAS K9</a>
+                <a href="/caninos"           class="nav-item {% if request.url.path == '/caninos' %}active{% endif %}"><i class="bi bi-shield-fill"></i> CANINOS K9</a>
+                <a href="/salud-canina"      class="nav-item {% if request.url.path == '/salud-canina' %}active{% endif %}"><i class="bi bi-heart-pulse-fill"></i> SALUD CANINA</a>
+                <a href="/geolocalizacion"   class="nav-item {% if request.url.path == '/geolocalizacion' %}active{% endif %}"><i class="bi bi-geo-alt-fill"></i> GEOLOCALIZACIÓN</a>
+                <a href="/cursos"            class="nav-item {% if request.url.path == '/cursos' %}active{% endif %}"><i class="bi bi-mortarboard-fill"></i> ACADEMIA K9</a>
+                <a href="/notificaciones"    class="nav-item {% if request.url.path == '/notificaciones' %}active{% endif %}" id="navNotif"><i class="bi bi-bell-fill"></i> NOTIFICACIONES<span class="notif-badge" id="notifBadge"></span></a>
+            {% endif %}
+        </nav>
+
+        <div class="nav-footer">
+            <a href="/logout" class="nav-item" style="color:#ff6b6b; border-left-color:transparent;">
+                <i class="bi bi-box-arrow-left"></i> SALIR
+            </a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="content-inner" style="max-width:1200px; margin:0 auto;">
+            {% block contenido %}{% endblock %}
+        </div>
+    </main>
+
+<script>
+/* ══════════════════════════════════════════
+   SISTEMA DE NOTIFICACIONES — polling + push
+══════════════════════════════════════════ */
+(function () {
+    let _prevCount = -1;
+
+    /* Sonido de alerta desde archivo MP3 */
+    function playAlertSound() {
+        try {
+            const audio = new Audio('/static/sounds/notificacion.mp3');
+            audio.volume = 0.7;
+            audio.play().catch(() => {});
+        } catch(e) {}
+    }
+
+    /* Notificación del navegador */
+    function showBrowserNotif(count, items) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        const primero = items[0] || {};
+        const body = primero.canino
+            ? `${primero.canino} — ${primero.vacuna} vence ${primero.dias < 0 ? 'hace ' + (primero.dias*-1) + ' día(s)' : primero.dias === 0 ? 'hoy' : 'en ' + primero.dias + ' día(s)'}`
+            : `Hay ${count} alerta(s) de vacunas pendientes`;
+        new Notification('⚠ CANGUARD — Vacunas', { body, icon: '/static/images/logo.png' });
+    }
+
+    /* Actualizar badge del sidebar */
+    function actualizarBadge(count) {
+        const badge   = document.getElementById('notifBadge');
+        const navItem = document.getElementById('navNotif');
+        if (!badge) return;
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = 'inline-block';
+            if (navItem) navItem.classList.add('has-alert');
+        } else {
+            badge.style.display = 'none';
+            if (navItem) navItem.classList.remove('has-alert');
+        }
+    }
+
+    /* Polling cada 90 segundos */
+    async function checkNotificaciones() {
+        try {
+            const res  = await fetch('/api/notificaciones/count');
+            const data = await res.json();
+            const count = data.count || 0;
+
+            actualizarBadge(count);
+
+            /* Solo notificar si llegaron nuevas desde la última comprobación */
+            if (_prevCount >= 0 && count > _prevCount) {
+                playAlertSound();
+                showBrowserNotif(count, data.items || []);
+            }
+            _prevCount = count;
+        } catch(e) {}
+    }
+
+    /* Solicitar permiso de notificaciones en primer uso */
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
+    /* Ejecutar al cargar y cada 90s */
+    document.addEventListener('DOMContentLoaded', checkNotificaciones);
+    setInterval(checkNotificaciones, 90_000);
+})();
+</script>
+</body>
+</html>

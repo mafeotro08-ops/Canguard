@@ -1,0 +1,227 @@
+{% extends "layout.html" %}
+{% block contenido %}
+<style>
+    .reg-wrap {
+        max-width: 860px; margin: 0 auto;
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 16px; box-shadow: var(--card-shadow); overflow: hidden;
+    }
+
+    /* Header con franja dorada */
+    .reg-header {
+        background: linear-gradient(135deg, #0d1b2a 0%, #1a2d4a 100%);
+        padding: 32px 40px; position: relative; overflow: hidden;
+        border-bottom: 3px solid var(--primary);
+    }
+    .reg-header::after {
+        content: ''; position: absolute; right: -40px; top: -40px;
+        width: 180px; height: 180px; border-radius: 50%;
+        background: rgba(230,184,0,0.08);
+    }
+    .reg-header h1 {
+        font-size: 20px; font-weight: 900; letter-spacing: 3px;
+        color: #fff; text-transform: uppercase; margin: 0;
+    }
+    .reg-header h1 span { color: var(--primary); }
+    .reg-header p {
+        color: rgba(255,255,255,.45); font-size: 11px;
+        letter-spacing: 2px; margin-top: 6px; text-transform: uppercase;
+    }
+
+    /* Body */
+    .reg-body { padding: 36px 40px; }
+
+    /* Grid 2 columnas */
+    .reg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; }
+    .reg-full  { grid-column: span 2; }
+    @media(max-width:640px){ .reg-grid { grid-template-columns: 1fr; } .reg-full { grid-column: span 1; } }
+
+    /* Labels */
+    .reg-label {
+        display: block; font-size: 10px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1.4px;
+        color: var(--primary); margin-bottom: 7px;
+    }
+
+    /* Inputs */
+    .reg-input {
+        width: 100%; padding: 11px 14px;
+        background: var(--surface-1); border: 1.5px solid var(--border);
+        border-radius: 8px; color: var(--text-main); font-size: 13.5px;
+        outline: none; transition: border-color .2s, box-shadow .2s; box-sizing: border-box;
+    }
+    .reg-input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(230,184,0,0.14);
+        background: var(--input-focus-bg);
+    }
+    .reg-input:invalid:not(:placeholder-shown) { border-color: #ef4444; }
+
+    /* Campo deshabilitado (País) */
+    .reg-input-static {
+        width: 100%; padding: 11px 14px;
+        background: var(--surface-2); border: 1.5px solid var(--border);
+        border-radius: 8px; color: var(--text-muted); font-size: 13.5px;
+        display: flex; align-items: center; gap: 10px; box-sizing: border-box;
+    }
+    .flag-co {
+        display: inline-block; width: 20px; height: 14px; border-radius: 2px; flex-shrink: 0;
+        background: linear-gradient(180deg,#fcd116 33%,#003893 33%,#003893 66%,#ce1126 66%);
+    }
+
+    /* Teléfono */
+    .phone-wrap { display: flex; }
+    .phone-prefix {
+        padding: 0 14px; background: var(--surface-2);
+        border: 1.5px solid var(--border); border-right: none;
+        border-radius: 8px 0 0 8px; display: flex; align-items: center;
+        font-size: 13px; font-weight: 700; color: var(--text-main);
+        min-width: 58px; justify-content: center; white-space: nowrap;
+    }
+    .phone-input { border-radius: 0 8px 8px 0 !important; border-left: none !important; }
+    .phone-input:focus { border-left: none !important; }
+
+    /* Divisor de sección */
+    .reg-section {
+        grid-column: span 2; margin: 6px 0 2px;
+        font-size: 9px; font-weight: 800; letter-spacing: 2px;
+        text-transform: uppercase; color: var(--text-muted);
+        border-bottom: 1px solid var(--border); padding-bottom: 8px;
+    }
+
+    /* Botón */
+    .reg-btn {
+        grid-column: span 2; margin-top: 8px;
+        display: block; width: 100%; padding: 16px;
+        background: var(--primary); color: #111; border: none;
+        border-radius: 10px; font-size: 13px; font-weight: 900;
+        letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+        transition: background .2s, transform .1s;
+    }
+    .reg-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+
+    /* Nota requerido */
+    .req { color: #ef4444; margin-left: 2px; }
+    .reg-note { font-size: 11px; color: var(--text-muted); margin-bottom: 20px; }
+</style>
+
+<div class="reg-wrap">
+    <!-- Encabezado -->
+    <div class="reg-header">
+        <h1>VINCULAR <span>ENTIDAD</span></h1>
+        <p>Protocolo de sincronización territorial</p>
+    </div>
+
+    <!-- Formulario -->
+    <div class="reg-body">
+        <p class="reg-note"><span class="req">*</span> Campos obligatorios</p>
+
+        <form action="/RegistroEntidad" method="POST">
+            <div class="reg-grid">
+
+                <!-- Sección: Identificación -->
+                <div class="reg-section">Identificación</div>
+
+                <!-- Razón Social — ancho completo -->
+                <div class="reg-full">
+                    <label class="reg-label">Razón Social <span class="req">*</span></label>
+                    <input type="text" name="RazonSocial" class="reg-input"
+                           placeholder="Ej: Policía Nacional de Colombia" required>
+                </div>
+
+                <!-- NIT -->
+                <div>
+                    <label class="reg-label">NIT <span class="req">*</span></label>
+                    <input type="text" name="NitCif" class="reg-input"
+                           placeholder="Ej: 899999034-7" required>
+                    <input type="hidden" name="PaisEntidad" value="CO">
+                </div>
+
+                <!-- País (estático) -->
+                <div>
+                    <label class="reg-label">País</label>
+                    <div class="reg-input-static">
+                        <span class="flag-co"></span> Colombia
+                    </div>
+                </div>
+
+                <!-- Sección: Ubicación -->
+                <div class="reg-section">Ubicación</div>
+
+                <!-- Ciudad -->
+                <div>
+                    <label class="reg-label">Ciudad / Municipio <span class="req">*</span></label>
+                    <input type="text" name="UbicacionEntidad" id="inputCiudad"
+                           class="reg-input" list="listaCiudades"
+                           placeholder="Buscar ciudad..." required>
+                    <datalist id="listaCiudades"></datalist>
+                </div>
+
+                <!-- Dirección -->
+                <div>
+                    <label class="reg-label">Dirección <span class="req">*</span></label>
+                    <input type="text" id="autocomplete" name="DireccionEntidad"
+                           class="reg-input"
+                           placeholder="Calle, número, barrio..." required>
+                </div>
+
+                <!-- Sección: Contacto -->
+                <div class="reg-section">Contacto</div>
+
+                <!-- Teléfono -->
+                <div>
+                    <label class="reg-label">Teléfono <span class="req">*</span></label>
+                    <div class="phone-wrap">
+                        <span class="phone-prefix">+57</span>
+                        <input type="tel" id="inputTelefono" name="TelefonoEntidad"
+                               class="reg-input phone-input"
+                               placeholder="3001234567"
+                               pattern="[0-9]{10}" maxlength="10"
+                               title="Solo el número local sin código de país" required>
+                    </div>
+                </div>
+
+                <!-- Botón enviar -->
+                <button type="submit" class="reg-btn">
+                    &#10003; Finalizar Registro
+                </button>
+
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+async function cargarCiudades() {
+    const input    = document.getElementById('inputCiudad');
+    const datalist = document.getElementById('listaCiudades');
+    if (!input || !datalist) return;
+    datalist.innerHTML = '';
+    input.placeholder  = 'Buscando ciudades...';
+    try {
+        const r    = await fetch('https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.json');
+        const data = await r.json();
+        data.forEach(dep => dep.ciudades.forEach(ciudad => {
+            const opt = document.createElement('option');
+            opt.value = `${ciudad.toUpperCase()}, ${dep.departamento.toUpperCase()}`;
+            datalist.appendChild(opt);
+        }));
+        input.placeholder = 'Buscar ciudad o municipio...';
+    } catch {
+        input.placeholder = 'Escribe la ciudad manualmente';
+    }
+}
+
+function initAutocomplete() {
+    const input = document.getElementById('autocomplete');
+    if (!input || typeof google === 'undefined') return;
+    new google.maps.places.Autocomplete(input, {
+        fields: ['formatted_address', 'geometry'],
+        types:  ['address']
+    });
+}
+
+document.addEventListener('DOMContentLoaded', cargarCiudades);
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBwYUWVZC_3ZuXDhnOhfCMDDVtWVMiclPo&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
+{% endblock %}

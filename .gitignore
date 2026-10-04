@@ -1,0 +1,30 @@
+# Claves y contraseñas: NUNCA subir (usar .env.example como plantilla)
+.env
+
+# Entorno virtual de Python (cada quien lo crea con: pip install -r requirements.txt)
+venv/
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+
+# ---- Archivos que suben los usuarios desde la app ----
+# Se sube la carpeta (con .gitkeep), nunca su contenido.
+
+# images/: se ignora todo (incluye los logos de cada entidad: images/{entidad}/logo/)...
+backend/app/static/images/*
+# ...excepto la imagen fija del diseño
+!backend/app/static/images/canino.png
+# ...y las carpetas de usuarios y caninos (solo su .gitkeep)
+!backend/app/static/images/usuarios/
+backend/app/static/images/usuarios/*
+!backend/app/static/images/usuarios/.gitkeep
+!backend/app/static/images/caninos/
+backend/app/static/images/caninos/*
+!backend/app/static/images/caninos/.gitkeep
+
+# Videos de visión y archivos de programas
+backend/app/static/vision/*
+!backend/app/static/vision/.gitkeep
+backend/app/static/programas/*
+!backend/app/static/programas/.gitkeep

@@ -1,0 +1,169 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<!-- Google Maps API script -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBwYUWVZC_3ZuXDhnOhfCMDDVtWVMiclPo&callback=initMap&libraries=places&v=beta&loading=async" async defer></script>
+
+<style>
+    .geo-header {
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .geo-header h1 {
+        color: white;
+        font-size: 24px;
+        font-weight: 900;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+    }
+    
+    #map { /* Cambiado de .map-frame a #map para la convención de Google Maps */
+        width: 100%;
+        height: 75vh;
+        background: #000;
+        border: 2px solid var(--primary);
+        box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+        position: relative;
+        z-index: 5;
+        border-radius: 4px;
+    }
+
+    /* Estilos personalizados para el InfoWindow de Google Maps */
+    .gm-style-iw.gm-style-iw-c { /* Contenedor principal del InfoWindow */
+        background: rgba(5, 15, 25, 0.9);
+        color: var(--primary);
+        border: 1px solid var(--primary);
+        border-radius: 0;
+        padding: 10px;
+    }
+    .gm-style-iw.gm-style-iw-t::after { /* Punta del InfoWindow */
+        background: var(--primary);
+    }
+    .gm-style-iw-d { /* Div de contenido del InfoWindow */
+        overflow: hidden !important; /* Evita barras de desplazamiento si el contenido es pequeño */
+    }
+    .gm-style-iw-c button { /* Botón de cierre */
+        color: var(--primary);
+        opacity: 0.7;
+    }
+    .gm-style-iw-c button:hover {
+        opacity: 1;
+    }
+    /* Asegúrate de que el contenido del InfoWindow tenga el color correcto */
+    .gm-style-iw-c .gm-style-iw-d b {
+        color: white;
+    }
+    .gm-style-iw-c .gm-style-iw-d {
+        color: var(--primary);
+    }
+</style>
+
+<div class="geo-header">
+    <h1>RADAR <span style="color: var(--primary);">GEOLOCALIZACIÓN</span></h1>
+    <p style="color: var(--primary); font-size: 10px; letter-spacing: 2px;">SECTOR: BOGOTÁ D.C. // SAT-VIEW</p>
+</div>
+
+<div id="map"></div>
+
+<script>
+    let map;
+
+    // Estilo de mapa oscuro personalizado para Google Maps
+    const darkMapStyle = [
+        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+        {
+            featureType: "administrative.locality",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#d59563" }],
+        },
+        {
+            featureType: "poi",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#d59563" }],
+        },
+        {
+            featureType: "poi.park",
+            elementType: "geometry",
+            stylers: [{ color: "#263c3f" }],
+        },
+        {
+            featureType: "poi.park",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#6b9a76" }],
+        },
+        {
+            featureType: "road",
+            elementType: "geometry",
+            stylers: [{ color: "#38414e" }],
+        },
+        {
+            featureType: "road",
+            elementType: "geometry.stroke",
+            stylers: [{ color: "#212a37" }],
+        },
+        {
+            featureType: "road",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#9ca5b3" }],
+        },
+        {
+            featureType: "road.highway",
+            elementType: "geometry",
+            stylers: [{ color: "#746855" }],
+        },
+        {
+            featureType: "road.highway",
+            elementType: "geometry.stroke",
+            stylers: [{ color: "#1f2835" }],
+        },
+        {
+            featureType: "road.highway",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#f3d19c" }],
+        },
+        {
+            featureType: "transit",
+            elementType: "geometry",
+            stylers: [{ color: "#2f3948" }],
+        },
+        {
+            featureType: "transit.station",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#d59563" }],
+        },
+        {
+            featureType: "water",
+            elementType: "geometry",
+            stylers: [{ color: "#17263c" }],
+        },
+        {
+            featureType: "water",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#515c6d" }],
+        },
+        {
+            featureType: "water",
+            elementType: "labels.text.stroke",
+            stylers: [{ color: "#17263c" }],
+        },
+    ];
+
+    function initMap() {
+    // Coordenadas de Bogotá
+        const bogota = { lat: 4.60971, lng: -74.08175 };
+        
+        map = new google.maps.Map(document.getElementById("map"), {
+            center: bogota,
+            zoom: 13,
+            styles: darkMapStyle, // Aplica el estilo oscuro personalizado
+            mapTypeControl: false, // Oculta los controles de tipo de mapa
+            streetViewControl: false, // Oculta el control de Street View
+            fullscreenControl: false, // Oculta el control de pantalla completa
+            zoomControl: true, // Muestra los controles de zoom
+            scaleControl: true, // Muestra el control de escala
+        });
+    }
+</script>
+{% endblock %}

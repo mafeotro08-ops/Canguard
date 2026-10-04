@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<style>
+    .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+    .page-header h1 { font-size:22px; font-weight:800; color:var(--text-main); letter-spacing:1px; }
+    .page-header .sub { font-size:12px; color:var(--text-muted); margin-top:3px; }
+
+    .notif-list { display:flex; flex-direction:column; gap:12px; }
+
+    .notif-item { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; box-shadow:var(--card-shadow); padding:16px 20px; display:flex; align-items:center; gap:16px; }
+    .notif-item.vencida { border-left:4px solid #ef4444; }
+    .notif-item.por-vencer { border-left:4px solid #f59e0b; }
+
+    .notif-icon { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+    .notif-icon.vencida  { background:#fee2e2; color:#ef4444; }
+    .notif-icon.por-vencer { background:#fef3c7; color:#d97706; }
+
+    .notif-body { flex:1; }
+    .notif-titulo { font-size:14px; font-weight:700; color:var(--text-main); margin-bottom:3px; }
+    .notif-detalle { font-size:12px; color:var(--text-muted); }
+
+    .notif-badge-dias { padding:5px 14px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .notif-badge-dias.vencida  { background:#fee2e2; color:#991b1b; }
+    .notif-badge-dias.hoy      { background:#fef3c7; color:#92400e; }
+    .notif-badge-dias.manana   { background:#fef9c3; color:#713f12; }
+    .notif-badge-dias.pronto   { background:#dbeafe; color:#1e40af; }
+
+    .empty-state { text-align:center; padding:70px 20px; color:var(--text-muted); }
+    .empty-state i { font-size:52px; margin-bottom:14px; display:block; color:#22c55e; }
+    .empty-state .title { font-size:18px; font-weight:700; color:var(--text-main); margin-bottom:6px; }
+
+    .notif-actions { margin-bottom:20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .btn-perm { display:inline-flex; align-items:center; gap:7px; padding:9px 18px; background:transparent; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px; font-weight:700; cursor:pointer; transition:.18s; }
+    .btn-perm:hover { background:var(--primary); color:#000; }
+    .notif-help { font-size:12px; color:var(--text-muted); }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-bell-fill" style="color:var(--primary); margin-right:8px;"></i>NOTIFICACIONES</h1>
+        <div class="sub">Alertas de vacunas próximas a vencer o ya vencidas</div>
+    </div>
+    <span style="font-size:12px; color:var(--text-muted);">Actualizado: {{ today }}</span>
+</div>
+
+<div class="notif-actions">
+    <button class="btn-perm" id="btnPermiso" onclick="pedirPermiso()" style="display:none;">
+        <i class="bi bi-bell-fill"></i> Activar notificaciones del navegador
+    </button>
+    <span class="notif-help"><i class="bi bi-info-circle"></i> Las alertas se detectan automáticamente. Recarga la página para actualizar.</span>
+</div>
+
+{% if alertas %}
+<div class="notif-list">
+{% for a in alertas %}
+{% set cls = 'vencida' if a.vencida else ('hoy' if a.dias == 0 else ('manana' if a.dias == 1 else 'pronto')) %}
+<div class="notif-item {{ 'vencida' if a.vencida else 'por-vencer' }}">
+    <div class="notif-icon {{ 'vencida' if a.vencida else 'por-vencer' }}">
+        <i class="bi bi-{{ 'x-circle-fill' if a.vencida else 'exclamation-triangle-fill' }}"></i>
+    </div>
+    <div class="notif-body">
+        <div class="notif-titulo">
+            <i class="bi bi-shield-dog-fill" style="color:var(--primary); margin-right:4px;"></i>
+            {{ a.canino }} — {{ a.vacuna }}
+        </div>
+        <div class="notif-detalle">
+            Fecha de vencimiento: <strong>{{ a.fecha }}</strong>
+            {% if a.vencida %}
+             · Venció hace {{ (a.dias * -1) }} día{{ 's' if (a.dias * -1) != 1 else '' }}
+            {% endif %}
+        </div>
+    </div>
+    <span class="notif-badge-dias {{ cls }}">
+        {% if a.vencida %}
+        ✕ Vencida
+        {% elif a.dias == 0 %}
+        ⚠ Vence hoy
+        {% elif a.dias == 1 %}
+        ⚠ Vence mañana
+        {% else %}
+        En {{ a.dias }} días
+        {% endif %}
+    </span>
+</div>
+{% endfor %}
+</div>
+
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-check-circle-fill"></i>
+    <div class="title">Todo al día</div>
+    <p>No hay vacunas próximas a vencer ni vencidas en este momento.</p>
+</div>
+{% endif %}
+
+<script>
+/* Pedir permiso de notificación al cargar */
+document.addEventListener('DOMContentLoaded', () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+        document.getElementById('btnPermiso').style.display = 'inline-flex';
+    }
+});
+
+function pedirPermiso() {
+    Notification.requestPermission().then(p => {
+        if (p === 'granted') {
+            document.getElementById('btnPermiso').style.display = 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

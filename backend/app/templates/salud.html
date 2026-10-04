@@ -1,0 +1,526 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<style>
+    /* ── Cabecera ─────────────────────── */
+    .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+    .page-header h1 { font-size:22px; font-weight:800; color:var(--text-main); letter-spacing:1px; }
+    .page-header .sub { font-size:12px; color:var(--text-muted); margin-top:3px; }
+
+    /* ── Filtros ──────────────────────── */
+    .filter-bar { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:14px 18px; margin-bottom:24px; box-shadow:var(--card-shadow); }
+    .filter-group { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .filter-label { font-size:11px; font-weight:700; color:var(--text-muted); white-space:nowrap; }
+    .filter-input-wrap { position:relative; }
+    .filter-input-wrap i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13px; pointer-events:none; }
+    .filter-input { padding:8px 12px 8px 32px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); width:210px; transition:.18s; }
+    .filter-input:focus { outline:none; border-color:var(--primary); background:var(--input-focus-bg); }
+    .filter-select { padding:8px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); cursor:pointer; }
+    .filter-select:focus { outline:none; border-color:var(--primary); }
+    .filter-clear { padding:8px 14px; border:1px solid var(--border); border-radius:7px; font-size:12px; background:transparent; color:var(--text-muted); cursor:pointer; transition:.18s; display:flex; align-items:center; gap:5px; }
+    .filter-clear:hover { background:#fee2e2; border-color:#fca5a5; color:#dc2626; }
+    .filter-count { font-size:12px; color:var(--text-muted); margin-top:8px; margin-bottom:0; }
+
+    /* ── Leyenda de salud ─────────────── */
+    .leyenda { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; }
+    .leyenda-item { display:flex; align-items:center; gap:5px; color:var(--text-muted); }
+
+    /* ── Cards ────────────────────────── */
+    .salud-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:18px; }
+
+    .salud-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; box-shadow:var(--card-shadow); overflow:hidden; transition:transform .18s, box-shadow .18s; }
+    .salud-card:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.12); }
+
+    /* Barra de estado de salud */
+    .health-bar { height:5px; }
+    .health-bar.al_dia       { background:linear-gradient(90deg,#22c55e,#16a34a); }
+    .health-bar.por_vencer   { background:linear-gradient(90deg,#f59e0b,#d97706); }
+    .health-bar.vencida      { background:linear-gradient(90deg,#ef4444,#dc2626); }
+    .health-bar.sin_registro { background:linear-gradient(90deg,#94a3b8,#64748b); }
+
+    /* Cabecera de la card */
+    .card-top { display:flex; align-items:center; gap:14px; padding:16px 18px 14px; border-bottom:1px solid var(--card-border); }
+    .canino-foto-sm { width:54px; height:54px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); flex-shrink:0; }
+    .canino-foto-ph-sm { width:54px; height:54px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--text-muted); flex-shrink:0; }
+    .card-top-info { flex:1; min-width:0; }
+    .canino-nombre { font-size:15px; font-weight:800; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .canino-meta { font-size:11px; color:var(--text-muted); margin-top:2px; }
+    .health-badge { font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+    .hb-al_dia       { background:#dcfce7; color:#16a34a; }
+    .hb-por_vencer   { background:#fef3c7; color:#92400e; }
+    .hb-vencida      { background:#fee2e2; color:#991b1b; }
+    .hb-sin_registro { background:var(--surface-2); color:var(--text-muted); }
+
+    /* Lista de vacunas dentro de la card */
+    .vac-list { padding:12px 18px; min-height:60px; }
+    .vac-list-title { font-size:10px; font-weight:700; color:var(--text-muted); letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; }
+    .vac-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--card-border); font-size:12px; }
+    .vac-row:last-child { border-bottom:none; }
+    .vac-ico { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; flex-shrink:0; }
+    .vac-ico.ok      { background:#dcfce7; color:#16a34a; }
+    .vac-ico.expiring{ background:#fef3c7; color:#92400e; }
+    .vac-ico.expired { background:#fee2e2; color:#dc2626; }
+    .vac-ico.none    { background:var(--surface-2); color:var(--text-muted); }
+    .vac-nombre { flex:1; font-weight:600; color:var(--text-main); }
+    .vac-fecha  { font-size:11px; color:var(--text-muted); }
+    .vac-del    { background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px; padding:2px 4px; border-radius:4px; transition:.15s; opacity:.6; }
+    .vac-del:hover { opacity:1; background:#fee2e2; }
+    .no-vac { font-size:12px; color:var(--text-muted); font-style:italic; text-align:center; padding:8px 0; }
+
+    /* Acciones de la card */
+    .card-actions { display:flex; gap:8px; padding:12px 18px; background:var(--surface-1); border-top:1px solid var(--card-border); }
+    .btn-vac { flex:1; padding:9px 0; border:1px solid var(--primary); background:transparent; color:var(--primary); border-radius:7px; font-size:12px; font-weight:700; cursor:pointer; transition:.18s; display:flex; align-items:center; justify-content:center; gap:5px; }
+    .btn-vac:hover { background:var(--primary); color:#000; }
+    .btn-hist { flex:1; padding:9px 0; border:1px solid #3b82f6; background:transparent; color:#3b82f6; border-radius:7px; font-size:12px; font-weight:700; cursor:pointer; transition:.18s; display:flex; align-items:center; justify-content:center; gap:5px; text-decoration:none; }
+    .btn-hist:hover { background:#3b82f6; color:#fff; }
+
+    /* ── Estado vacío ─────────────────── */
+    .empty-state { text-align:center; padding:70px 20px; color:var(--text-muted); }
+    .empty-state i { font-size:52px; margin-bottom:14px; display:block; }
+
+    /* ── MODAL compartido ─────────────── */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal-box { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px 14px; border-bottom:1px solid var(--card-border); }
+    .modal-header h2 { font-size:16px; font-weight:800; color:var(--text-main); }
+    .modal-close { background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); transition:.15s; }
+    .modal-close:hover { color:#ef4444; }
+    .modal-body { padding:20px 22px; }
+    .modal-canino-info { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface-2); border-radius:9px; margin-bottom:18px; border:1px solid var(--card-border); }
+    .modal-canino-info img, .modal-canino-info .mini-ph { width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); flex-shrink:0; }
+    .modal-canino-info .mini-ph { background:var(--surface-3); display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--text-muted); }
+    .modal-canino-info .info-txt { font-size:13px; font-weight:700; color:var(--text-main); }
+    .modal-canino-info .info-sub { font-size:11px; color:var(--text-muted); }
+    .form-group { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+    .form-group label { font-size:11px; font-weight:600; color:var(--text-muted); letter-spacing:.4px; text-transform:uppercase; }
+    .form-group input, .form-group select, .form-group textarea { padding:9px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); transition:.18s; width:100%; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline:none; border-color:var(--primary); background:var(--input-focus-bg); }
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .req { color:#ef4444; font-weight:700; margin-left:2px; }
+    .modal-footer { padding:14px 22px; border-top:1px solid var(--card-border); display:flex; justify-content:flex-end; gap:10px; }
+    .btn-cancel { padding:9px 18px; background:transparent; border:1px solid var(--border); border-radius:7px; color:var(--text-muted); font-size:13px; cursor:pointer; }
+    .btn-cancel:hover { background:var(--surface-2); }
+    .btn-save { padding:9px 22px; background:var(--primary); border:none; border-radius:7px; color:#000; font-size:13px; font-weight:700; cursor:pointer; transition:.18s; display:flex; align-items:center; gap:6px; }
+    .btn-save:hover { background:var(--primary-hover); }
+
+    /* Botón personalizado para inputs file */
+    .btn-file-pick { display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border:1.5px dashed var(--primary); border-radius:8px; background:transparent; color:var(--primary); font-size:12px; font-weight:700; cursor:pointer; transition:.18s; white-space:nowrap; letter-spacing:.3px; }
+    .btn-file-pick:hover { background:rgba(184,134,11,.09); }
+    .file-label-txt { font-size:12px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+    .file-label-txt.has-file { color:var(--primary); font-weight:600; }
+
+    /* Historial PDF preview */
+    .hist-preview { text-align:center; padding:16px; background:var(--surface-2); border-radius:9px; border:1px solid var(--card-border); margin-bottom:16px; }
+    .hist-preview i { font-size:40px; color:#3b82f6; display:block; margin-bottom:8px; }
+    .hist-preview a { color:#3b82f6; font-weight:600; font-size:13px; }
+    .hist-nuevo { margin-top:10px; font-size:11px; color:var(--text-muted); }
+</style>
+
+<!-- ═══════ CABECERA ═══════ -->
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-heart-pulse-fill" style="color:var(--primary); margin-right:8px;"></i>SALUD CANINA</h1>
+        <div class="sub">Registro de vacunas e historial clínico por unidad canina</div>
+    </div>
+    <div class="leyenda">
+        <span class="leyenda-item" title="La próxima vacuna vence en más de 30 días — todo en orden"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Al día</span>
+        <span class="leyenda-item" title="La próxima vacuna vence en 30 días o menos — actuar pronto"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block;"></span> Por vencer (≤30 días)</span>
+        <span class="leyenda-item" title="La fecha de vencimiento ya pasó — vacuna expirada"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span> Vencida</span>
+        <span class="leyenda-item" title="No se han registrado vacunas para este canino"><span style="width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;"></span> Sin registro</span>
+    </div>
+</div>
+
+{% if flash_ok %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({ icon:'success', title:'¡Listo!', text:{{ flash_ok | tojson }}, timer:3000, showConfirmButton:false, toast:true, position:'top-end' });
+});
+</script>
+{% endif %}
+
+{% if alertas %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const alertas = {{ alertas | tojson }};
+    const filas = alertas.map(a => {
+        const d = a.dias === 0 ? '⚠ <strong>hoy</strong>' : a.dias === 1 ? '⚠ <strong>mañana</strong>' : `en ${a.dias} días`;
+        return `<tr><td style="padding:6px 10px; font-weight:600;">${a.canino}</td><td style="padding:6px 10px;">${a.vacuna}</td><td style="padding:6px 10px; color:#ef4444;">${d} — ${a.fecha}</td></tr>`;
+    }).join('');
+    Swal.fire({
+        icon: 'warning',
+        title: `${alertas.length} vacuna${alertas.length > 1 ? 's' : ''} próxima${alertas.length > 1 ? 's' : ''} a vencer`,
+        html: `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                   <thead><tr style="border-bottom:1px solid #e5e7eb;">
+                       <th style="padding:6px 10px; color:#6b7280; font-size:11px;">CANINO</th>
+                       <th style="padding:6px 10px; color:#6b7280; font-size:11px;">VACUNA</th>
+                       <th style="padding:6px 10px; color:#6b7280; font-size:11px;">VENCE</th>
+                   </tr></thead><tbody>${filas}</tbody></table>`,
+        confirmButtonColor: '#b8860b',
+        confirmButtonText: 'Entendido',
+    });
+});
+</script>
+{% endif %}
+
+<!-- ═══════ FILTROS ═══════ -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <span class="filter-label"><i class="bi bi-funnel-fill"></i> Filtrar:</span>
+        <div class="filter-input-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="filtroTexto" class="filter-input" placeholder="Nombre del canino..." oninput="filtrar()">
+        </div>
+        {% if session.rol == 'super_admin' %}
+        <select id="filtroEntidad" class="filter-select" onchange="filtrar()">
+            <option value="">Todas las entidades</option>
+            {% for ent in entidades %}
+            <option value="{{ ent.id }}">{{ ent.razon_social }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <select id="filtroSalud" class="filter-select" onchange="filtrar()">
+            <option value="">Todos los estados</option>
+            <option value="al_dia">Al día</option>
+            <option value="por_vencer">Por vencer</option>
+            <option value="vencida">Vencida</option>
+            <option value="sin_registro">Sin registro</option>
+        </select>
+        <button class="filter-clear" onclick="limpiarFiltros()"><i class="bi bi-x-circle"></i> Limpiar</button>
+    </div>
+    <p class="filter-count" id="filtroResultados"></p>
+</div>
+
+<!-- ═══════ CARDS ═══════ -->
+{% if caninos %}
+<div class="salud-grid" id="saludGrid">
+{% for c in caninos %}
+{% set est_salud = salud_map.get(c.id, 'sin_registro') %}
+{% set vacunas   = vac_map.get(c.id, []) %}
+<div class="salud-card"
+     data-nombre="{{ c.nombre | lower }}"
+     data-entidad="{{ c.id_entidad or '' }}"
+     data-salud="{{ est_salud }}">
+
+    <div class="health-bar {{ est_salud }}"></div>
+
+    <!-- Info del canino -->
+    <div class="card-top">
+        {% if c.foto_path %}
+        <img src="/static/{{ c.foto_path }}" class="canino-foto-sm">
+        {% else %}
+        <div class="canino-foto-ph-sm"><i class="bi bi-shield-dog-fill"></i></div>
+        {% endif %}
+        <div class="card-top-info">
+            <div class="canino-nombre">{{ c.nombre }}</div>
+            <div class="canino-meta">
+                {{ c.raza }}
+                {% if c.nombre_entidad %} · {{ c.nombre_entidad }}{% endif %}
+                {% if c.nombre_guia %} · Guía: {{ c.nombre_guia }}{% endif %}
+            </div>
+        </div>
+        <span class="health-badge hb-{{ est_salud }}">
+            {% if est_salud == 'al_dia' %}✓ Al día
+            {% elif est_salud == 'por_vencer' %}⚠ Por vencer
+            {% elif est_salud == 'vencida' %}✕ Vencida
+            {% else %}— Sin registro{% endif %}
+        </span>
+    </div>
+
+    <!-- Lista de vacunas -->
+    <div class="vac-list">
+        <div class="vac-list-title"><i class="bi bi-capsule"></i> Vacunas registradas ({{ vacunas | length }})</div>
+        {% if vacunas %}
+            {% for v in vacunas[:4] %}
+            {% set fv = v.fecha_vencimiento %}
+            {% if fv %}
+                {% if fv < today %}
+                    {% set ico_cls = 'expired' %}{% set ico = '✕' %}
+                {% elif (fv - today).days <= 30 %}
+                    {% set ico_cls = 'expiring' %}{% set ico = '⚠' %}
+                {% else %}
+                    {% set ico_cls = 'ok' %}{% set ico = '✓' %}
+                {% endif %}
+            {% else %}
+                {% set ico_cls = 'none' %}{% set ico = '·' %}
+            {% endif %}
+            <div class="vac-row">
+                <div class="vac-ico {{ ico_cls }}">{{ ico }}</div>
+                <span class="vac-nombre">{{ v.nombre_vacuna }}</span>
+                <span class="vac-fecha">
+                    {{ v.fecha_aplicacion }}
+                    {% if fv %} → {{ fv }}{% endif %}
+                </span>
+                {% if v.comprobante_path %}
+                <a href="/static/{{ v.comprobante_path }}" target="_blank"
+                   title="Ver comprobante" style="color:#3b82f6; font-size:13px; padding:2px 4px; border-radius:4px; transition:.15s;"
+                   onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background=''">
+                    <i class="bi bi-file-earmark-pdf-fill"></i>
+                </a>
+                {% endif %}
+                <form method="POST" action="/salud-canina/vacunas/{{ v.id }}/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar esta vacuna?')">
+                    <button type="submit" class="vac-del" title="Eliminar"><i class="bi bi-trash3"></i></button>
+                </form>
+            </div>
+            {% endfor %}
+            {% if vacunas | length > 4 %}
+            <div style="font-size:11px; color:var(--text-muted); text-align:center; padding-top:4px;">
+                +{{ (vacunas | length) - 4 }} más — abre el modal para verlas todas
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="no-vac"><i class="bi bi-capsule" style="color:var(--text-muted)"></i> Sin vacunas registradas</div>
+        {% endif %}
+    </div>
+
+    <!-- Acciones -->
+    <div class="card-actions">
+        <button class="btn-vac" onclick="abrirModalVacuna({{ c.id }})">
+            <i class="bi bi-plus-circle-fill"></i> Agregar Vacuna
+        </button>
+        <button class="btn-hist" onclick="abrirModalHistorial({{ c.id }})">
+            <i class="bi bi-file-earmark-medical-fill"></i>
+            {% if c.historial_clinico_path %}Ver / Reemplazar{% else %}Subir Historial{% endif %}
+        </button>
+    </div>
+
+</div>
+{% endfor %}
+</div>
+
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-heart-pulse"></i>
+    <p>No hay caninos registrados{% if session.rol != 'super_admin' %} en tu entidad{% endif %}.</p>
+</div>
+{% endif %}
+
+<!-- ═══════ MODAL AGREGAR VACUNA ═══════ -->
+<div class="modal-overlay" id="modalVacuna">
+<div class="modal-box">
+    <div class="modal-header">
+        <h2><i class="bi bi-capsule" style="color:var(--primary)"></i> Registrar Vacuna</h2>
+        <button class="modal-close" onclick="cerrarModales()">&#x2715;</button>
+    </div>
+    <form method="POST" enctype="multipart/form-data" id="formVacuna">
+    <div class="modal-body">
+        <div class="modal-canino-info" id="vacInfo">
+            <div class="mini-ph"><i class="bi bi-shield-dog-fill"></i></div>
+            <div><div class="info-txt" id="vacNombre">—</div><div class="info-sub" id="vacRaza">—</div></div>
+        </div>
+
+        <div class="form-group">
+            <label>Tipo / Nombre de Vacuna <span class="req">*</span></label>
+            <select name="nombre_vacuna" id="fVacNombre" required>
+                <option value="">— Seleccionar —</option>
+                <option value="Antirrábica">Antirrábica (obligatoria por ley)</option>
+                <option value="Polivalente (DHPP)">Polivalente / DHPP</option>
+                <option value="Leptospirosis">Leptospirosis</option>
+                <option value="Bordetella">Bordetella (tos de las perreras)</option>
+                <option value="Leishmaniasis">Leishmaniasis</option>
+                <option value="Coronavirus Canino">Coronavirus Canino</option>
+                <option value="Otra">Otra</option>
+            </select>
+        </div>
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label>Fecha de Aplicación <span class="req">*</span></label>
+                <input type="date" name="fecha_aplicacion" id="fVacFechaAp" required>
+            </div>
+            <div class="form-group">
+                <label>Fecha de Vencimiento</label>
+                <input type="date" name="fecha_vencimiento" id="fVacFechaVen">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Notas</label>
+            <textarea name="notas" id="fVacNotas" style="min-height:60px" placeholder="Lote, observaciones…"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Comprobante / Carnet de Vacunación
+                <span style="font-size:10px; color:var(--text-muted); font-weight:400; letter-spacing:0; text-transform:none;">(PDF, JPG, PNG)</span>
+            </label>
+            <input type="file" name="comprobante" id="fVacFile"
+                   accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none"
+                   onchange="actualizarLabel(this,'fVacLabel')">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="btn-file-pick" onclick="document.getElementById('fVacFile').click()">
+                    <i class="bi bi-upload"></i> Seleccionar archivo
+                </button>
+                <span id="fVacLabel" class="file-label-txt">Sin archivos seleccionados</span>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="cerrarModales()">Cancelar</button>
+        <button type="submit" class="btn-save"><i class="bi bi-check-circle-fill"></i> Guardar Vacuna</button>
+    </div>
+    </form>
+</div>
+</div>
+
+<!-- ═══════ MODAL HISTORIAL CLÍNICO ═══════ -->
+<div class="modal-overlay" id="modalHistorial">
+<div class="modal-box">
+    <div class="modal-header">
+        <h2><i class="bi bi-file-earmark-medical-fill" style="color:#3b82f6"></i> Historial Clínico</h2>
+        <button class="modal-close" onclick="cerrarModales()">&#x2715;</button>
+    </div>
+    <form method="POST" enctype="multipart/form-data" id="formHistorial">
+    <div class="modal-body">
+        <div class="modal-canino-info" id="histInfo">
+            <div class="mini-ph"><i class="bi bi-shield-dog-fill"></i></div>
+            <div><div class="info-txt" id="histNombre">—</div><div class="info-sub" id="histRaza">—</div></div>
+        </div>
+
+        <!-- Preview historial existente -->
+        <div id="histPreviewWrap" style="display:none">
+            <div class="hist-preview">
+                <i class="bi bi-file-earmark-medical-fill"></i>
+                <a href="#" id="histVerLink" target="_blank">Ver historial actual</a>
+                <div class="hist-nuevo">Sube un archivo nuevo para reemplazarlo</div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Archivo PDF / Imagen del Historial <span class="req">*</span></label>
+            <input type="file" name="historial" id="fHistFile"
+                   accept=".pdf,.jpg,.jpeg,.png,.webp" required style="display:none"
+                   onchange="actualizarLabel(this,'fHistLabel')">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="btn-file-pick" style="border-color:#3b82f6; color:#3b82f6;"
+                        onclick="document.getElementById('fHistFile').click()">
+                    <i class="bi bi-cloud-upload-fill"></i> Seleccionar archivo
+                </button>
+                <span id="fHistLabel" class="file-label-txt">Sin archivos seleccionados</span>
+            </div>
+            <span style="font-size:11px; color:var(--text-muted); margin-top:4px; display:block;">Formatos: PDF, JPG, PNG · máx. 10 MB</span>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="cerrarModales()">Cancelar</button>
+        <button type="submit" class="btn-save" style="background:#3b82f6; color:#fff;">
+            <i class="bi bi-cloud-upload-fill"></i> Subir Historial
+        </button>
+    </div>
+    </form>
+</div>
+</div>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+/* Datos de caninos para los modales */
+const CANINOS_SALUD = {
+    {% for c in caninos %}
+    {{ c.id }}: {
+        nombre:      {{ c.nombre | tojson }},
+        raza:        {{ (c.raza or '') | tojson }},
+        foto:        {{ (c.foto_path or '') | tojson }},
+        historial:   {{ (c.historial_clinico_path or '') | tojson }},
+    },
+    {% endfor %}
+};
+
+/* ── Abrir modal vacuna ── */
+function abrirModalVacuna(idCanino) {
+    const d = CANINOS_SALUD[idCanino];
+    if (!d) return;
+    document.getElementById('formVacuna').action = `/salud-canina/${idCanino}/vacuna`;
+    document.getElementById('formVacuna').reset();
+    actualizarInfoModal('vacInfo', 'vacNombre', 'vacRaza', d);
+    document.getElementById('modalVacuna').classList.add('open');
+}
+
+/* ── Abrir modal historial ── */
+function abrirModalHistorial(idCanino) {
+    const d = CANINOS_SALUD[idCanino];
+    if (!d) return;
+    document.getElementById('formHistorial').action = `/salud-canina/${idCanino}/historial`;
+    document.getElementById('formHistorial').reset();
+    actualizarInfoModal('histInfo', 'histNombre', 'histRaza', d);
+
+    const pw = document.getElementById('histPreviewWrap');
+    if (d.historial) {
+        document.getElementById('histVerLink').href = `/static/${d.historial}`;
+        pw.style.display = '';
+        document.getElementById('fHistFile').removeAttribute('required');
+    } else {
+        pw.style.display = 'none';
+        document.getElementById('fHistFile').setAttribute('required', '');
+    }
+    document.getElementById('modalHistorial').classList.add('open');
+}
+
+/* Helper: rellena la info del canino en el modal */
+function actualizarInfoModal(wrapId, nombreId, razaId, d) {
+    document.getElementById(nombreId).textContent = d.nombre;
+    document.getElementById(razaId).textContent   = d.raza;
+    const wrap = document.getElementById(wrapId);
+    const foto = wrap.querySelector('img, .mini-ph');
+    if (foto) foto.remove();
+    const img  = document.createElement(d.foto ? 'img' : 'div');
+    if (d.foto) {
+        img.src = `/static/${d.foto}`;
+        img.className = 'mini-ph'; img.style.cssText = 'width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid var(--primary);flex-shrink:0;';
+    } else {
+        img.className = 'mini-ph';
+        img.innerHTML = '<i class="bi bi-shield-dog-fill"></i>';
+    }
+    wrap.insertBefore(img, wrap.firstChild);
+}
+
+function cerrarModales() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+}
+
+function actualizarLabel(input, labelId) {
+    const label = document.getElementById(labelId);
+    if (!label) return;
+    if (input.files && input.files[0]) {
+        label.textContent = input.files[0].name;
+        label.classList.add('has-file');
+    } else {
+        label.textContent = 'Sin archivos seleccionados';
+        label.classList.remove('has-file');
+    }
+}
+document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) cerrarModales(); });
+});
+
+/* ── Filtros ── */
+const TOTAL_SALUD = {{ caninos | length }};
+
+function filtrar() {
+    const txt    = document.getElementById('filtroTexto').value.toLowerCase().trim();
+    const entVal = (document.getElementById('filtroEntidad') || {value:''}).value;
+    const salVal = document.getElementById('filtroSalud').value;
+
+    const cards = document.querySelectorAll('#saludGrid .salud-card');
+    let visible = 0;
+    cards.forEach(c => {
+        const okTxt = !txt    || c.dataset.nombre.includes(txt);
+        const okEnt = !entVal || c.dataset.entidad === entVal;
+        const okSal = !salVal || c.dataset.salud   === salVal;
+        const show  = okTxt && okEnt && okSal;
+        c.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    const el = document.getElementById('filtroResultados');
+    el.textContent = (txt || entVal || salVal)
+        ? `Mostrando ${visible} de ${TOTAL_SALUD} caninos`
+        : '';
+}
+
+function limpiarFiltros() {
+    document.getElementById('filtroTexto').value = '';
+    ['filtroEntidad','filtroSalud'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    filtrar();
+}
+</script>
+{% endblock %}

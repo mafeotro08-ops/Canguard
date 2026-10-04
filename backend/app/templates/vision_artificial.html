@@ -1,0 +1,342 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<style>
+    /* ── Encabezado ── */
+    .va-page-header { margin-bottom: 28px; }
+    .va-page-header h1 { font-size: 22px; font-weight: 900; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
+    .va-page-header p  { font-size: 13px; color: var(--text-muted); margin-top: 5px; }
+
+    /* ── Tarjetas de estadísticas ── */
+    .va-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .va-stat  { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px 18px; box-shadow: var(--card-shadow); display: flex; flex-direction: column; gap: 4px; }
+    .va-stat-val  { font-size: 26px; font-weight: 900; color: var(--primary); line-height: 1; }
+    .va-stat-lbl  { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ── Barra de filtros ── */
+    .va-filters { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 18px; margin-bottom: 22px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; box-shadow: var(--card-shadow); }
+    .va-filters label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+    .va-filters select, .va-filters input { padding: 7px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; background: var(--surface-1); color: var(--text-main); cursor: pointer; }
+    .va-filters select:focus, .va-filters input:focus { outline: none; border-color: var(--primary); }
+    .btn-filtrar { padding: 7px 18px; background: var(--primary); color: #fff; border: none; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; transition: .18s; }
+    .btn-filtrar:hover { opacity: .88; }
+    .btn-limpiar { padding: 7px 14px; background: transparent; color: var(--text-muted); border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; transition: .18s; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+    .btn-limpiar:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* ── Selector de vista ── */
+    .view-toggle { display: flex; gap: 6px; margin-left: auto; }
+    .view-btn { width: 32px; height: 32px; border: 1px solid var(--border); background: var(--surface-1); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); transition: .15s; }
+    .view-btn.active, .view-btn:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    /* ── Galería grid ── */
+    #vistaGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+    #vistaLista { display: none; flex-direction: column; gap: 10px; }
+    .va-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; box-shadow: var(--card-shadow); transition: .18s; }
+    .va-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.12); transform: translateY(-2px); }
+
+    /* preview */
+    .va-thumb { width: 100%; height: 160px; background: var(--surface-2); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
+    .va-thumb img  { width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: .2s; }
+    .va-thumb img:hover { transform: scale(1.04); }
+    .va-thumb video { width: 100%; height: 100%; object-fit: cover; }
+    .va-thumb .no-thumb { font-size: 44px; color: var(--text-muted); }
+    .tipo-badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; text-transform: uppercase; letter-spacing: .4px; backdrop-filter: blur(4px); }
+
+    /* meta */
+    .va-meta { padding: 11px 14px; }
+    .va-canino { font-size: 14px; font-weight: 800; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .va-prog   { font-size: 11px; color: var(--primary); font-weight: 700; margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+    .va-info   { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .va-info span { display: flex; align-items: center; gap: 3px; }
+    .va-notas  { font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .va-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .btn-ver-va  { flex: 1; text-align: center; padding: 6px; background: var(--surface-1); border: 1px solid var(--card-border); border-radius: 6px; font-size: 11px; color: var(--text-main); text-decoration: none; transition: .15s; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .btn-ver-va:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-ses-va  { padding: 6px 10px; background: transparent; border: 1px solid var(--primary); color: var(--primary); border-radius: 6px; font-size: 11px; text-decoration: none; transition: .15s; display: flex; align-items: center; gap: 4px; }
+    .btn-ses-va:hover { background: var(--primary); color: #fff; }
+    .btn-del-va  { padding: 6px 10px; background: transparent; border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; font-size: 11px; cursor: pointer; transition: .18s; }
+    .btn-del-va:hover { background: #ef4444; color: #fff; }
+
+    /* ── Vista lista ── */
+    .va-row { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--card-shadow); }
+    .va-row-thumb { width: 70px; height: 52px; border-radius: 7px; overflow: hidden; flex-shrink: 0; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+    .va-row-thumb img, .va-row-thumb video { width: 100%; height: 100%; object-fit: cover; }
+    .va-row-info { flex: 1; min-width: 0; }
+    .va-row-canino { font-size: 13px; font-weight: 800; color: var(--text-main); }
+    .va-row-sub    { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .va-row-sub span { display: flex; align-items: center; gap: 3px; }
+    .va-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── Lightbox ── */
+    #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    #lightbox.open { display: flex; }
+    #lightbox img, #lightbox video { max-width: 90vw; max-height: 88vh; border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+    #lbClose { position: absolute; top: 20px; right: 24px; font-size: 32px; color: #fff; cursor: pointer; line-height: 1; }
+    #lbClose:hover { color: var(--primary); }
+
+    /* ── Estado vacío ── */
+    .va-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .va-empty i { font-size: 52px; color: var(--primary); display: block; margin-bottom: 12px; }
+    .va-empty p { font-size: 14px; }
+    .va-empty a { color: var(--primary); font-weight: 700; }
+</style>
+
+<!-- Encabezado -->
+<div class="va-page-header">
+    <h1><i class="bi bi-camera-reels-fill" style="color:var(--primary);"></i> Visión Artificial</h1>
+    <p>Galería central de imágenes y videos de análisis por sesión de entrenamiento K9.</p>
+</div>
+
+{% if flash_ok %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({ icon:'success', title:'¡Listo!', text:{{ flash_ok | tojson }}, timer:2200, showConfirmButton:false, toast:true, position:'top-end' });
+});
+</script>
+{% endif %}
+
+<!-- Stats -->
+{% set total_arch = archivos | length %}
+{% set total_imgs = archivos | selectattr('tipo', 'equalto', 'imagen') | list | length %}
+{% set total_vids = archivos | selectattr('tipo', 'equalto', 'video')  | list | length %}
+{% set caninos_set = archivos | map(attribute='nombre_canino') | unique | list %}
+
+<div class="va-stats">
+    <div class="va-stat">
+        <div class="va-stat-val">{{ total_arch }}</div>
+        <div class="va-stat-lbl"><i class="bi bi-collection-fill"></i> Archivos totales</div>
+    </div>
+    <div class="va-stat">
+        <div class="va-stat-val">{{ total_imgs }}</div>
+        <div class="va-stat-lbl"><i class="bi bi-image-fill"></i> Imágenes</div>
+    </div>
+    <div class="va-stat">
+        <div class="va-stat-val">{{ total_vids }}</div>
+        <div class="va-stat-lbl"><i class="bi bi-camera-video-fill"></i> Videos</div>
+    </div>
+    <div class="va-stat">
+        <div class="va-stat-val">{{ caninos_set | length }}</div>
+        <div class="va-stat-lbl"><i class="bi bi-shield-fill"></i> Caninos analizados</div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="va-filters">
+    <div style="display:flex; flex-direction:column; gap:3px;">
+        <label>Tipo</label>
+        <select id="fTipo" onchange="filtrar()">
+            <option value="">Todos</option>
+            <option value="imagen">Imágenes</option>
+            <option value="video">Videos</option>
+        </select>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:3px;">
+        <label>Canino</label>
+        <select id="fCanino" onchange="filtrar()">
+            <option value="">Todos</option>
+            {% for c in caninos_set | sort %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:3px;">
+        <label>Programa</label>
+        <select id="fProg" onchange="filtrar()">
+            <option value="">Todos</option>
+            {% for p in archivos | map(attribute='nombre_programa') | unique | sort %}
+            {% if p %}<option value="{{ p }}">{{ p }}</option>{% endif %}
+            {% endfor %}
+        </select>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:3px;">
+        <label>Buscar</label>
+        <input type="text" id="fTexto" placeholder="Canino, programa, notas…" oninput="filtrar()" style="width:180px;">
+    </div>
+    <button class="btn-limpiar" onclick="limpiarFiltros()"><i class="bi bi-x-circle"></i> Limpiar</button>
+    <div id="resultCount" style="font-size:12px; color:var(--text-muted); margin-left:4px;"></div>
+
+    <div class="view-toggle" style="margin-left:auto;">
+        <div class="view-btn active" id="btnGrid" onclick="setVista('grid')" title="Cuadrícula"><i class="bi bi-grid-3x3-gap-fill"></i></div>
+        <div class="view-btn"        id="btnList" onclick="setVista('lista')" title="Lista"><i class="bi bi-list-ul"></i></div>
+    </div>
+</div>
+
+<!-- Vista GRID -->
+<div id="vistaGrid">
+{% if archivos %}
+{% for arch in archivos %}
+<div class="va-card"
+     data-tipo="{{ arch.tipo or '' }}"
+     data-canino="{{ arch.nombre_canino or '' }}"
+     data-prog="{{ arch.nombre_programa or '' }}"
+     data-texto="{{ ((arch.nombre_canino or '') ~ ' ' ~ (arch.nombre_programa or '') ~ ' ' ~ (arch.notas or '') ~ ' ' ~ (arch.nombre_entidad or '')) | lower }}">
+    <div class="va-thumb">
+        {% if arch.tipo == 'imagen' %}
+        <img src="/static/{{ arch.archivo_path }}" alt="visión" onclick="abrirLightbox(this.src, 'img')">
+        {% elif arch.tipo == 'video' %}
+        <video src="/static/{{ arch.archivo_path }}" controls muted preload="metadata"></video>
+        {% else %}
+        <span class="no-thumb"><i class="bi bi-file-earmark-fill"></i></span>
+        {% endif %}
+        <span class="tipo-badge">
+            {% if arch.tipo == 'video' %}<i class="bi bi-camera-video-fill"></i> Video
+            {% else %}<i class="bi bi-image-fill"></i> Imagen{% endif %}
+        </span>
+    </div>
+    <div class="va-meta">
+        <div class="va-canino">{{ arch.nombre_canino }}</div>
+        <div class="va-prog"><i class="bi bi-mortarboard-fill"></i> {{ arch.nombre_programa or arch.especialidad }}</div>
+        <div class="va-info">
+            <span><i class="bi bi-calendar3"></i> {{ arch.fecha }}</span>
+            {% if arch.nombre_entidad %}<span><i class="bi bi-building"></i> {{ arch.nombre_entidad }}</span>{% endif %}
+            {% if arch.resultado %}
+            <span><i class="bi bi-patch-check-fill" style="color:var(--primary);"></i>
+                {{ {'aprobado':'Aprobado','reprobado':'Reprobado','en_proceso':'En proceso'}.get(arch.resultado, arch.resultado) }}
+            </span>
+            {% endif %}
+        </div>
+        {% if arch.notas %}<div class="va-notas">{{ arch.notas }}</div>{% endif %}
+        <div class="va-actions">
+            <a href="/static/{{ arch.archivo_path }}" target="_blank" class="btn-ver-va">
+                <i class="bi bi-eye-fill"></i> Ver
+            </a>
+            <a href="/cursos/{{ arch.especialidad }}/sesiones/{{ arch.id_sesion }}/vision" class="btn-ses-va" title="Ir a sesión">
+                <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+            <form method="POST" action="/vision/{{ arch.id }}/eliminar" style="display:inline"
+                  onsubmit="return confirm('¿Eliminar este archivo?')">
+                <button type="submit" class="btn-del-va"><i class="bi bi-trash3-fill"></i></button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="va-empty" style="grid-column:1/-1;">
+    <i class="bi bi-camera-video"></i>
+    <p>Aún no hay archivos de visión cargados.<br>Ve a <a href="/cursos">Academia K9</a>, abre una sesión y usa el botón <strong>Visión</strong>.</p>
+</div>
+{% endif %}
+</div>
+
+<!-- Vista LISTA -->
+<div id="vistaLista">
+{% for arch in archivos %}
+<div class="va-row"
+     data-tipo="{{ arch.tipo or '' }}"
+     data-canino="{{ arch.nombre_canino or '' }}"
+     data-prog="{{ arch.nombre_programa or '' }}"
+     data-texto="{{ ((arch.nombre_canino or '') ~ ' ' ~ (arch.nombre_programa or '') ~ ' ' ~ (arch.notas or '') ~ ' ' ~ (arch.nombre_entidad or '')) | lower }}">
+    <div class="va-row-thumb">
+        {% if arch.tipo == 'imagen' %}
+        <img src="/static/{{ arch.archivo_path }}" alt="visión">
+        {% elif arch.tipo == 'video' %}
+        <video src="/static/{{ arch.archivo_path }}" muted preload="metadata"></video>
+        {% else %}
+        <i class="bi bi-file-earmark-fill" style="font-size:22px; color:var(--text-muted);"></i>
+        {% endif %}
+    </div>
+    <div class="va-row-info">
+        <div class="va-row-canino">{{ arch.nombre_canino }}</div>
+        <div class="va-row-sub">
+            <span><i class="bi bi-mortarboard-fill" style="color:var(--primary);"></i> {{ arch.nombre_programa or arch.especialidad }}</span>
+            <span><i class="bi bi-calendar3"></i> {{ arch.fecha }}</span>
+            {% if arch.nombre_entidad %}<span><i class="bi bi-building"></i> {{ arch.nombre_entidad }}</span>{% endif %}
+            {% if arch.notas %}<span><i class="bi bi-chat-left-text-fill"></i> {{ arch.notas }}</span>{% endif %}
+        </div>
+    </div>
+    <div class="va-row-actions">
+        <a href="/static/{{ arch.archivo_path }}" target="_blank" class="btn-ver-va" style="padding:6px 12px;">
+            <i class="bi bi-eye-fill"></i> Ver
+        </a>
+        <a href="/cursos/{{ arch.especialidad }}/sesiones/{{ arch.id_sesion }}/vision" class="btn-ses-va" title="Ir a sesión">
+            <i class="bi bi-box-arrow-up-right"></i>
+        </a>
+        <form method="POST" action="/vision/{{ arch.id }}/eliminar" style="display:inline"
+              onsubmit="return confirm('¿Eliminar este archivo?')">
+            <button type="submit" class="btn-del-va"><i class="bi bi-trash3-fill"></i></button>
+        </form>
+    </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="cerrarLightbox()">
+    <span id="lbClose" onclick="cerrarLightbox()">&times;</span>
+    <img id="lbImg" src="" alt="visión" style="display:none;">
+    <video id="lbVid" controls style="display:none;"></video>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+var _vista = 'grid';
+
+function setVista(v) {
+    _vista = v;
+    document.getElementById('vistaGrid').style.display = v === 'grid' ? 'grid' : 'none';
+    document.getElementById('vistaLista').style.display = v === 'lista' ? 'flex' : 'none';
+    document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+    document.getElementById('btnList').classList.toggle('active', v === 'lista');
+    filtrar();
+}
+
+function filtrar() {
+    var tipo   = document.getElementById('fTipo').value.toLowerCase();
+    var canino = document.getElementById('fCanino').value.toLowerCase();
+    var prog   = document.getElementById('fProg').value.toLowerCase();
+    var texto  = document.getElementById('fTexto').value.toLowerCase();
+
+    var sel = _vista === 'grid'
+        ? document.querySelectorAll('#vistaGrid .va-card')
+        : document.querySelectorAll('#vistaLista .va-row');
+
+    var vis = 0;
+    sel.forEach(function(el) {
+        var ok = true;
+        if (tipo   && el.dataset.tipo.toLowerCase()   !== tipo)   ok = false;
+        if (canino && el.dataset.canino.toLowerCase() !== canino) ok = false;
+        if (prog   && el.dataset.prog.toLowerCase()   !== prog)   ok = false;
+        if (texto  && !el.dataset.texto.includes(texto))          ok = false;
+        el.style.display = ok ? '' : 'none';
+        if (ok) vis++;
+    });
+    var rc = document.getElementById('resultCount');
+    if (rc) rc.textContent = (tipo || canino || prog || texto) ? vis + ' resultado(s)' : '';
+}
+
+function limpiarFiltros() {
+    document.getElementById('fTipo').value   = '';
+    document.getElementById('fCanino').value = '';
+    document.getElementById('fProg').value   = '';
+    document.getElementById('fTexto').value  = '';
+    filtrar();
+}
+
+function abrirLightbox(src, t) {
+    var lb = document.getElementById('lightbox');
+    var img = document.getElementById('lbImg');
+    var vid = document.getElementById('lbVid');
+    if (t === 'img') {
+        img.src = src; img.style.display = '';
+        vid.style.display = 'none'; vid.pause && vid.pause();
+    } else {
+        vid.src = src; vid.style.display = '';
+        img.style.display = 'none';
+    }
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function cerrarLightbox() {
+    var lb = document.getElementById('lightbox');
+    lb.classList.remove('open');
+    document.getElementById('lbVid').pause && document.getElementById('lbVid').pause();
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') cerrarLightbox();
+});
+</script>
+{% endblock %}

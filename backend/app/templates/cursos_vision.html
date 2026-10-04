@@ -1,0 +1,517 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<style>
+    .back-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+    .back-link { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); text-decoration:none; transition:.15s; }
+    .back-link:hover { color:var(--primary); }
+
+    /* Hero */
+    .vision-hero { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; padding:18px 22px; margin-bottom:22px; box-shadow:var(--card-shadow); border-left:5px solid var(--primary); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .vision-hero-icon { width:46px; height:46px; border-radius:10px; background:var(--surface-1); border:1px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--primary); flex-shrink:0; }
+    .vision-hero-titulo { font-size:16px; font-weight:800; color:var(--text-main); }
+    .vision-hero-meta { font-size:12px; color:var(--text-muted); margin-top:4px; display:flex; gap:14px; flex-wrap:wrap; }
+    .vision-hero-meta span { display:flex; align-items:center; gap:4px; }
+
+    /* Pestañas */
+    .tabs-bar { display:flex; gap:0; border-bottom:2px solid var(--card-border); margin-bottom:22px; }
+    .tab-btn { padding:10px 22px; font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:var(--text-muted); background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; cursor:pointer; display:flex; align-items:center; gap:7px; transition:.15s; }
+    .tab-btn:hover { color:var(--primary); }
+    .tab-btn.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+    .tab-count { background:var(--primary); color:#fff; border-radius:10px; padding:1px 7px; font-size:10px; }
+
+    /* ── Tab 1: dos columnas upload | transcripción ── */
+    .vision-layout { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+    @media(max-width:860px){ .vision-layout { grid-template-columns:1fr; } }
+
+    .upload-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; padding:18px; box-shadow:var(--card-shadow); }
+    .upload-card-title { font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+    .upload-zone { border:2px dashed var(--card-border); border-radius:9px; padding:22px 14px; text-align:center; cursor:pointer; transition:.2s; position:relative; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .upload-zone:hover, .upload-zone.drag { border-color:var(--primary); background:var(--surface-1); }
+    .upload-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+    .upload-zone i.up-icon { font-size:32px; color:var(--primary); display:block; margin-bottom:9px; }
+    .upload-zone p { font-size:12px; color:var(--text-muted); margin:0; }
+    .upload-filename { font-size:11px; font-weight:700; color:var(--primary); margin-top:6px; display:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .btn-subir { margin-top:12px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px; background:var(--primary); color:#fff; font-size:12px; font-weight:700; border:none; border-radius:7px; cursor:pointer; transition:.18s; }
+    .btn-subir:hover { opacity:.88; }
+
+    /* Columna derecha */
+    .col-right { display:flex; flex-direction:column; gap:16px; }
+
+    .preview-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; overflow:hidden; box-shadow:var(--card-shadow); flex:1; }
+    .preview-area { width:100%; background:#000; display:flex; align-items:center; justify-content:center; height:100%; min-height:260px; }
+    .preview-area video { width:100%; max-height:460px; display:block; }
+    .preview-area img { width:100%; max-height:460px; object-fit:contain; display:block; }
+    .preview-empty { width:100%; min-height:280px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--surface-2); gap:10px; color:var(--text-muted); }
+    .preview-empty i { font-size:44px; color:var(--primary); }
+
+    .trans-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; padding:18px; box-shadow:var(--card-shadow); }
+    .trans-title { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .chip-ia { background:var(--primary); color:#fff; font-size:9px; padding:2px 7px; border-radius:10px; margin-left:4px; }
+    .trans-area { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--surface-1); color:var(--text-main); resize:vertical; min-height:220px; line-height:1.6; font-family:inherit; flex:1; }
+    .trans-area:focus { outline:none; border-color:var(--primary); }
+    .trans-actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+    .btn-guardar-trans { display:flex; align-items:center; gap:5px; padding:8px 18px; background:var(--primary); color:#fff; border:none; border-radius:7px; font-size:12px; font-weight:700; cursor:pointer; transition:.18s; }
+    .btn-guardar-trans:hover { opacity:.88; }
+    .btn-retrans { display:flex; align-items:center; gap:5px; padding:8px 14px; background:transparent; border:1px solid var(--primary); color:var(--primary); border-radius:7px; font-size:12px; font-weight:700; cursor:pointer; transition:.18s; }
+    .btn-retrans:hover { background:var(--primary); color:#fff; }
+
+    /* ── Tab 2: toggle lista / grid ── */
+    .view-toggle { display:flex; gap:6px; margin-bottom:16px; justify-content:flex-end; }
+    .btn-view { padding:6px 12px; border-radius:7px; border:1px solid var(--card-border); background:var(--card-bg); color:var(--text-muted); font-size:13px; cursor:pointer; transition:.15s; display:flex; align-items:center; gap:5px; }
+    .btn-view:hover { border-color:var(--primary); color:var(--primary); }
+    .btn-view.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+
+    /* Grid view */
+    .arch-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px; }
+    .arch-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; overflow:hidden; box-shadow:var(--card-shadow); }
+    .arch-preview { width:100%; height:150px; background:#000; overflow:hidden; display:flex; align-items:center; justify-content:center; position:relative; }
+    .arch-preview video, .arch-preview img { width:100%; height:100%; object-fit:cover; }
+    .arch-preview .tipo-pill { position:absolute; top:7px; left:7px; background:rgba(0,0,0,.6); color:#fff; font-size:9px; font-weight:700; padding:3px 7px; border-radius:5px; text-transform:uppercase; letter-spacing:.3px; backdrop-filter:blur(4px); }
+    .arch-card-meta { padding:10px 12px; }
+    .arch-card-fecha { font-size:11px; color:var(--text-muted); }
+    .arch-card-notas { font-size:11px; color:var(--text-muted); font-style:italic; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .arch-card-actions { display:flex; gap:6px; margin-top:8px; }
+    .btn-ver-small { flex:1; text-align:center; padding:5px; background:var(--surface-1); border:1px solid var(--card-border); border-radius:6px; font-size:11px; color:var(--text-main); text-decoration:none; transition:.15s; display:flex; align-items:center; justify-content:center; gap:4px; }
+    .btn-ver-small:hover { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .btn-del-small { padding:5px 9px; background:transparent; border:1px solid #ef4444; color:#ef4444; border-radius:6px; font-size:11px; cursor:pointer; transition:.15s; }
+    .btn-del-small:hover { background:#ef4444; color:#fff; }
+
+    /* List view */
+    .arch-list { display:flex; flex-direction:column; gap:10px; }
+    .arch-list-row { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; box-shadow:var(--card-shadow); display:flex; align-items:center; gap:14px; padding:10px 16px; }
+    .arch-list-thumb { width:72px; height:52px; border-radius:7px; background:#000; overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    .arch-list-thumb video, .arch-list-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .arch-list-thumb i { font-size:22px; color:var(--text-muted); }
+    .arch-list-info { flex:1; min-width:0; }
+    .arch-list-name { font-size:12px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .arch-list-meta { font-size:11px; color:var(--text-muted); margin-top:2px; display:flex; gap:12px; flex-wrap:wrap; }
+    .arch-list-trans { font-size:11px; color:var(--text-muted); font-style:italic; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .arch-list-actions { display:flex; gap:6px; flex-shrink:0; }
+    /* ocultar según vista activa */
+    .arch-container.vista-lista .arch-grid { display:none; }
+    .arch-container.vista-grid .arch-list { display:none; }
+
+    /* ── Tab 3: Documentos ── */
+    .doc-list { display:flex; flex-direction:column; gap:14px; }
+    .doc-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; padding:18px 20px; box-shadow:var(--card-shadow); display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; }
+    .doc-icon { width:48px; height:48px; border-radius:10px; background:var(--surface-1); border:1px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--primary); flex-shrink:0; }
+    .doc-body { flex:1; min-width:0; }
+    .doc-titulo { font-size:13px; font-weight:800; color:var(--text-main); }
+    .doc-trans { margin-top:8px; background:var(--surface-1); border:1px solid var(--card-border); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--text-muted); max-height:90px; overflow-y:auto; white-space:pre-wrap; line-height:1.6; }
+    .doc-notrans { margin-top:6px; font-size:12px; color:var(--text-muted); font-style:italic; }
+    .doc-actions { display:flex; flex-direction:column; gap:8px; flex-shrink:0; }
+    .btn-dl-word { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; background:var(--primary); color:#fff; border-radius:8px; font-size:12px; font-weight:700; text-decoration:none; white-space:nowrap; }
+    .btn-dl-word:hover { opacity:.88; color:#fff; }
+    .btn-ver-arch { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:transparent; border:1px solid var(--card-border); color:var(--text-muted); border-radius:8px; font-size:12px; text-decoration:none; transition:.15s; }
+    .btn-ver-arch:hover { border-color:var(--primary); color:var(--primary); }
+
+    .empty-tab { text-align:center; padding:60px 20px; color:var(--text-muted); }
+    .empty-tab i { font-size:48px; color:var(--primary); display:block; margin-bottom:12px; }
+</style>
+
+<!-- Cabecera -->
+<div class="back-row">
+    <a href="/cursos/{{ curso.key }}/sesiones" class="back-link">
+        <i class="bi bi-arrow-left-circle-fill"></i> Volver a sesiones — {{ curso.nombre }}
+    </a>
+</div>
+
+<!-- Hero -->
+<div class="vision-hero">
+    <div class="vision-hero-icon"><i class="bi bi-camera-reels-fill"></i></div>
+    <div style="flex:1;">
+        <div class="vision-hero-titulo">Visión Artificial — {{ sesion.nombre_canino }}</div>
+        <div class="vision-hero-meta">
+            <span><i class="bi bi-calendar3"></i> {{ sesion.fecha }}</span>
+            <span><i class="bi bi-building"></i> {{ sesion.nombre_entidad or '—' }}</span>
+            {% if sesion.resultado %}
+            <span><i class="bi bi-patch-check-fill" style="color:var(--primary);"></i>
+                {{ {'aprobado':'Aprobado','reprobado':'Reprobado','en_proceso':'En proceso'}.get(sesion.resultado, sesion.resultado) }}
+            </span>
+            {% endif %}
+            <span><i class="bi bi-collection-fill"></i> {{ archivos | length }} archivo{{ 's' if archivos | length != 1 else '' }}</span>
+        </div>
+    </div>
+</div>
+
+{% if flash_ok %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({ icon:'success', title:'¡Listo!', text:{{ flash_ok | tojson }}, timer:2200, showConfirmButton:false, toast:true, position:'top-end' });
+});
+</script>
+{% endif %}
+
+<!-- Barra de pestañas -->
+<div class="tabs-bar">
+    <button class="tab-btn active" onclick="cambiarTab('Cargar', this)">
+        <i class="bi bi-cloud-arrow-up-fill"></i> Cargar archivo
+    </button>
+    <button class="tab-btn" onclick="cambiarTab('Archivos', this)">
+        <i class="bi bi-collection-play-fill"></i> Archivos subidos
+        {% if archivos %}<span class="tab-count">{{ archivos | length }}</span>{% endif %}
+    </button>
+    <button class="tab-btn" onclick="cambiarTab('Documentos', this)">
+        <i class="bi bi-file-earmark-word-fill"></i> Documentos
+        {% if archivos %}<span class="tab-count">{{ archivos | length }}</span>{% endif %}
+    </button>
+</div>
+
+
+<!-- ══════════════════════════════
+     PESTAÑA 1 — Cargar + Transcripción
+════════════════════════════════ -->
+<div class="tab-pane active" id="paneCargar">
+<div class="vision-layout">
+
+    <!-- Izquierda: zona de carga limpia (siempre igual, sin video precargado) -->
+    <div class="upload-card">
+        <div class="upload-card-title">
+            <i class="bi bi-cloud-arrow-up-fill" style="color:var(--primary);"></i> Cargar archivo
+        </div>
+        <form method="POST" action="/cursos/{{ curso.key }}/sesiones/{{ sesion.id }}/vision" enctype="multipart/form-data" id="uploadForm">
+            <div class="upload-zone" id="uploadZone" style="min-height:180px; padding:0; overflow:hidden; position:relative;">
+                <!-- Input siempre presente pero se mueve al estado vacío -->
+                <input type="file" name="archivo" id="archivoInput" accept="image/*,video/*,audio/*" required onchange="mostrarNombre(this)" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2;">
+                <!-- Estado vacío -->
+                <div id="uploadEmpty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 14px;width:100%;height:100%;">
+                    <i class="bi bi-cloud-arrow-up-fill up-icon"></i>
+                    <p>Arrastra imagen, video o audio<br>o haz clic para seleccionar</p>
+                </div>
+                <!-- Estado con archivo seleccionado -->
+                <div id="uploadPreviewWrap" style="display:none;flex-direction:column;align-items:center;width:100%;height:100%;">
+                    <video id="prevVideo" style="display:none;width:100%;max-height:230px;object-fit:cover;" muted playsinline></video>
+                    <img id="prevImg" style="display:none;width:100%;max-height:230px;object-fit:contain;" alt="preview">
+                    <div id="prevAudioIcon" style="display:none;padding:30px 0;font-size:48px;color:var(--primary);"><i class="bi bi-music-note-beamed"></i></div>
+                    <div style="width:100%;background:rgba(0,0,0,0.55);padding:7px 12px;display:flex;align-items:center;gap:8px;position:relative;z-index:3;">
+                        <i class="bi bi-paperclip" style="color:var(--primary);font-size:13px;"></i>
+                        <span id="archivoNombre" style="font-size:11px;font-weight:700;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                        <span style="font-size:10px;color:rgba(255,255,255,.6);">Clic para cambiar</span>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn-subir" id="btnSubir">
+                <i class="bi bi-upload"></i> Subir archivo
+            </button>
+        </form>
+    </div>
+
+    <!-- Derecha: transcripción del último archivo -->
+    <div class="trans-card" style="display:flex; flex-direction:column;">
+        <div class="trans-title">
+            <i class="bi bi-mic-fill" style="color:var(--primary);"></i>
+            Transcripción
+            <span class="chip-ia">Whisper local activo</span>
+        </div>
+        {% if archivos %}
+        {% set first = archivos[0] %}
+        <div id="previewArea" style="display:none;"></div>
+        <form method="POST" action="/vision/{{ first.id }}/notas" id="transForm" style="display:flex; flex-direction:column; flex:1;">
+            <textarea class="trans-area" name="texto" id="transArea"
+                placeholder="Sube un archivo — la transcripción aparecerá aquí automáticamente…">{{ first.notas if review else '' }}</textarea>
+            <div class="trans-actions">
+                <button type="submit" class="btn-guardar-trans">
+                    <i class="bi bi-floppy-fill"></i> Guardar
+                </button>
+                <button type="button" class="btn-retrans" onclick="autoTranscribirPrincipal({{ first.id }})">
+                    <i class="bi bi-arrow-clockwise"></i> Re-transcribir
+                </button>
+            </div>
+        </form>
+        {% else %}
+        <div style="padding:24px 14px; background:var(--surface-1); border:1px dashed var(--border); border-radius:8px; font-size:12px; color:var(--text-muted); display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;">
+            <i class="bi bi-mic" style="font-size:32px; color:var(--primary);"></i>
+            Sube un archivo para ver la transcripción aquí.
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+</div><!-- /paneCargar -->
+
+
+<!-- ══════════════════════════════
+     PESTAÑA 2 — Todos los archivos subidos
+════════════════════════════════ -->
+<div class="tab-pane" id="paneArchivos">
+{% if archivos %}
+
+<!-- Botones de vista -->
+<div class="view-toggle">
+    <button class="btn-view" id="btnVistaCuadros" onclick="setVista('grid')" title="Vista cuadros">
+        <i class="bi bi-grid-3x3-gap-fill"></i> Cuadros
+    </button>
+    <button class="btn-view" id="btnVistaLista" onclick="setVista('lista')" title="Vista lista">
+        <i class="bi bi-list-ul"></i> Lista
+    </button>
+</div>
+
+<div class="arch-container vista-grid" id="archContainer">
+
+    <!-- ── VISTA CUADROS ── -->
+    <div class="arch-grid">
+    {% for arch in archivos %}
+    <div class="arch-card">
+        <div class="arch-preview">
+            {% if arch.tipo == 'video' %}
+            <video src="/static/{{ arch.archivo_path }}" muted preload="metadata"></video>
+            {% elif arch.tipo == 'imagen' %}
+            <img src="/static/{{ arch.archivo_path }}" alt="archivo">
+            {% else %}
+            <i class="bi bi-file-earmark-music-fill" style="font-size:44px; color:var(--text-muted);"></i>
+            {% endif %}
+            <span class="tipo-pill">
+                <i class="bi {{ 'bi-camera-video-fill' if arch.tipo == 'video' else ('bi-image-fill' if arch.tipo == 'imagen' else 'bi-music-note-fill') }}"></i>
+                {{ arch.tipo or 'archivo' }}
+            </span>
+        </div>
+        <div class="arch-card-meta">
+            <div class="arch-card-fecha"><i class="bi bi-calendar3"></i> {{ arch.created_at.strftime('%d/%m/%Y %H:%M') if arch.created_at else '—' }}</div>
+            {% if arch.notas %}<div class="arch-card-notas">{{ arch.notas[:80] }}…</div>{% endif %}
+            <div class="arch-card-actions">
+                <a href="/static/{{ arch.archivo_path }}" target="_blank" class="btn-ver-small">
+                    <i class="bi bi-eye-fill"></i> Ver
+                </a>
+                <form method="POST" action="/vision/{{ arch.id }}/eliminar" onsubmit="return confirm('¿Eliminar este archivo?')">
+                    <button type="submit" class="btn-del-small"><i class="bi bi-trash3-fill"></i></button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+
+    <!-- ── VISTA LISTA ── -->
+    <div class="arch-list">
+    {% for arch in archivos %}
+    <div class="arch-list-row">
+        <div class="arch-list-thumb">
+            {% if arch.tipo == 'video' %}
+            <video src="/static/{{ arch.archivo_path }}" muted preload="metadata"></video>
+            {% elif arch.tipo == 'imagen' %}
+            <img src="/static/{{ arch.archivo_path }}" alt="archivo">
+            {% else %}
+            <i class="bi bi-file-earmark-music-fill"></i>
+            {% endif %}
+        </div>
+        <div class="arch-list-info">
+            <div class="arch-list-name">{{ arch.archivo_path.split('/')[-1] }}</div>
+            <div class="arch-list-meta">
+                <span><i class="bi bi-calendar3"></i> {{ arch.created_at.strftime('%d/%m/%Y %H:%M') if arch.created_at else '—' }}</span>
+                <span><i class="bi bi-tag-fill"></i> {{ arch.tipo or 'archivo' }}</span>
+                {% if arch.notas %}<span style="color:var(--badge-ok-text);"><i class="bi bi-check-circle-fill"></i> Transcripción lista</span>{% endif %}
+            </div>
+        </div>
+        <div class="arch-list-actions">
+            <a href="/static/{{ arch.archivo_path }}" target="_blank" class="btn-ver-small" style="flex:none; padding:6px 12px;">
+                <i class="bi bi-eye-fill"></i> Ver
+            </a>
+            <form method="POST" action="/vision/{{ arch.id }}/eliminar" onsubmit="return confirm('¿Eliminar este archivo?')">
+                <button type="submit" class="btn-del-small"><i class="bi bi-trash3-fill"></i></button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+
+</div><!-- /arch-container -->
+
+{% else %}
+<div class="empty-tab">
+    <i class="bi bi-collection-play"></i>
+    <p>Aún no hay archivos subidos para esta sesión.<br>Ve a la pestaña <strong>Cargar archivo</strong> para agregar el primero.</p>
+</div>
+{% endif %}
+</div><!-- /paneArchivos -->
+
+
+<!-- ══════════════════════════════
+     PESTAÑA 3 — Documentos (transcripción + Word)
+════════════════════════════════ -->
+<div class="tab-pane" id="paneDocumentos">
+{% if archivos %}
+<div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
+    <a href="/cursos/{{ curso.key }}/sesiones/{{ sesion.id }}/exportar-word" class="btn-dl-word">
+        <i class="bi bi-file-earmark-word-fill"></i> Exportar sesión completa (.docx)
+    </a>
+</div>
+<div class="doc-list">
+{% for arch in archivos %}
+<div class="doc-card">
+    <div class="doc-icon">
+        {% if arch.tipo == 'video' %}<i class="bi bi-camera-video-fill"></i>
+        {% elif arch.tipo == 'imagen' %}<i class="bi bi-image-fill"></i>
+        {% else %}<i class="bi bi-file-earmark-music-fill"></i>{% endif %}
+    </div>
+    <div class="doc-body">
+        <div class="doc-titulo">{{ arch.archivo_path.split('/')[-1] }}</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+            <i class="bi bi-calendar3"></i> {{ arch.created_at.strftime('%d/%m/%Y %H:%M') if arch.created_at else '—' }}
+            &nbsp;·&nbsp;
+            {{ arch.tipo or 'archivo' }}
+        </div>
+        {% if arch.notas %}
+        <div style="margin-top:6px; font-size:11px; color:var(--badge-ok-text); background:var(--badge-ok-bg); display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px;">
+            <i class="bi bi-check-circle-fill"></i> Transcripción lista — disponible en el documento
+        </div>
+        {% else %}
+        <div class="doc-notrans"><i class="bi bi-mic-mute-fill"></i> Sin transcripción aún —
+            <a href="#" onclick="event.preventDefault(); autoTranscribir({{ arch.id }}, this)" style="color:var(--primary);">Transcribir ahora</a>
+        </div>
+        {% endif %}
+    </div>
+    <div class="doc-actions" style="flex-direction:row; align-items:center;">
+        <a href="/vision/{{ arch.id }}/exportar-word" class="btn-dl-word">
+            <i class="bi bi-file-earmark-word-fill"></i> Descargar .docx
+        </a>
+    </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="empty-tab">
+    <i class="bi bi-file-earmark-word"></i>
+    <p>Aún no hay archivos subidos.<br>Los documentos aparecen aquí con su transcripción y botón de descarga.</p>
+</div>
+{% endif %}
+</div><!-- /paneDocumentos -->
+
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+function setVista(modo) {
+    var c = document.getElementById('archContainer');
+    if (!c) return;
+    c.className = 'arch-container vista-' + modo;
+    document.getElementById('btnVistaCuadros').classList.toggle('active', modo === 'grid');
+    document.getElementById('btnVistaLista').classList.toggle('active', modo === 'lista');
+    try { localStorage.setItem('arch_vista', modo); } catch(e) {}
+}
+(function() {
+    var v = 'grid';
+    try { v = localStorage.getItem('arch_vista') || 'grid'; } catch(e) {}
+    setVista(v);
+})();
+
+function cambiarTab(nombre, btn) {
+    document.querySelectorAll('.tab-pane').forEach(function(p){ p.classList.remove('active'); });
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.getElementById('pane' + nombre).classList.add('active');
+    btn.classList.add('active');
+}
+
+function mostrarNombre(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    document.getElementById('archivoNombre').textContent = file.name;
+    document.getElementById('uploadZone').style.borderColor = 'var(--primary)';
+
+    // Mostrar preview dentro de la zona
+    document.getElementById('uploadEmpty').style.display = 'none';
+    var wrap = document.getElementById('uploadPreviewWrap');
+    wrap.style.display = 'flex';
+
+    var pv = document.getElementById('prevVideo');
+    var pi = document.getElementById('prevImg');
+    var pa = document.getElementById('prevAudioIcon');
+    pv.style.display = 'none'; pi.style.display = 'none'; pa.style.display = 'none';
+
+    var url = URL.createObjectURL(file);
+    if (file.type.startsWith('video/')) {
+        pv.src = url; pv.style.display = 'block';
+    } else if (file.type.startsWith('image/')) {
+        pi.src = url; pi.style.display = 'block';
+    } else {
+        pa.style.display = 'flex';
+    }
+}
+
+var zone = document.getElementById('uploadZone');
+if (zone) {
+    zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('drag'); });
+    zone.addEventListener('dragleave', function(){ zone.classList.remove('drag'); });
+    zone.addEventListener('drop', function(e){
+        e.preventDefault(); zone.classList.remove('drag');
+        var files = e.dataTransfer.files;
+        if (files.length) {
+            var input = document.getElementById('archivoInput');
+            var dt = new DataTransfer();
+            dt.items.add(files[0]);
+            input.files = dt.files;
+            mostrarNombre(input);
+        }
+    });
+}
+
+var uploadForm = document.getElementById('uploadForm');
+if (uploadForm) {
+    uploadForm.addEventListener('submit', function(){
+        var btn = document.getElementById('btnSubir');
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Subiendo y transcribiendo…';
+        btn.disabled = true;
+    });
+}
+
+/* ── Auto-transcripción al darle Play al video ── */
+{% if archivos %}
+{% set first = archivos[0] %}
+(function() {
+    var video = document.querySelector('#previewArea video');
+    if (!video) return;
+    var yaTranscribio = {{ 'true' if first.notas else 'false' }};
+    if (yaTranscribio) return;
+    video.addEventListener('play', function handler() {
+        video.removeEventListener('play', handler);
+        autoTranscribirPrincipal({{ first.id }});
+    }, {once: true});
+})();
+{% endif %}
+
+async function autoTranscribirPrincipal(archId) {
+    var ta = document.getElementById('transArea');
+    if (!ta) return;
+    var btnGuardar = document.querySelector('.btn-guardar-trans');
+    ta.value = '';
+    ta.placeholder = '⏳ Transcribiendo con IA… por favor espera. Esto puede tardar unos segundos.';
+    ta.disabled = true;
+    if (btnGuardar) btnGuardar.disabled = true;
+    try {
+        var resp = await fetch('/vision/' + archId + '/transcribir-ajax', {method:'POST'});
+        var data = await resp.json();
+        ta.disabled = false;
+        if (btnGuardar) btnGuardar.disabled = false;
+        if (data.ok && data.texto) {
+            ta.value = data.texto;
+            ta.placeholder = '';
+            document.getElementById('transForm').submit();
+        } else {
+            ta.placeholder = '⚠ No se pudo transcribir: ' + (data.error || 'error desconocido');
+        }
+    } catch(e) {
+        ta.disabled = false;
+        if (btnGuardar) btnGuardar.disabled = false;
+        ta.placeholder = '⚠ Error de conexión. Intenta de nuevo.';
+    }
+}
+
+async function autoTranscribir(archId, linkEl) {
+    if (linkEl) { linkEl.textContent = '⏳ Transcribiendo…'; linkEl.style.pointerEvents = 'none'; }
+    try {
+        var resp = await fetch('/vision/' + archId + '/transcribir-ajax', {method:'POST'});
+        var data = await resp.json();
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo transcribir'));
+            if (linkEl) { linkEl.textContent = 'Transcribir ahora'; linkEl.style.pointerEvents = ''; }
+        }
+    } catch(e) {
+        alert('Error de conexión');
+        if (linkEl) { linkEl.textContent = 'Transcribir ahora'; linkEl.style.pointerEvents = ''; }
+    }
+}
+</script>
+{% endblock %}

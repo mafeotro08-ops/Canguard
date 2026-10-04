@@ -1,0 +1,464 @@
+{% extends "layout.html" %}
+{% block contenido %}
+<style>
+    :root {
+        --c-green:  #22c55e; --c-green-bg:  rgba(34,197,94,.12);
+        --c-blue:   #3b82f6; --c-blue-bg:   rgba(59,130,246,.12);
+        --c-purple: #8b5cf6; --c-purple-bg: rgba(139,92,246,.12);
+        --c-red:    #ef4444; --c-red-bg:    rgba(239,68,68,.12);
+        --c-teal:   #14b8a6; --c-teal-bg:   rgba(20,184,166,.12);
+        --c-orange: #f97316; --c-orange-bg: rgba(249,115,22,.12);
+        --c-gold:   var(--primary); --c-gold-bg: rgba(230,184,0,.13);
+    }
+
+    /* ── Hero banner ────────────────────────────────────── */
+    .dash-hero {
+        background: linear-gradient(135deg, #0d1b2a 0%, #1a2d4a 60%, #0f2340 100%);
+        border-radius: 16px; padding: 28px 32px;
+        margin-bottom: 22px; position: relative; overflow: hidden;
+        border: 1px solid rgba(230,184,0,.18);
+    }
+    .dash-hero::before {
+        content: ''; position: absolute; inset: 0;
+        background-image:
+            linear-gradient(rgba(184,134,11,.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(184,134,11,.06) 1px, transparent 1px);
+        background-size: 40px 40px;
+    }
+    .dash-hero::after {
+        content: ''; position: absolute;
+        right: -60px; top: -60px; width: 260px; height: 260px;
+        border-radius: 50%; background: rgba(230,184,0,.06);
+        pointer-events: none;
+    }
+    .hero-inner { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .hero-left h1 { font-size: 24px; font-weight: 900; color: #fff; letter-spacing: .5px; }
+    .hero-left h1 span { color: var(--primary); }
+    .hero-left p  { font-size: 12px; color: rgba(255,255,255,.5); margin-top: 5px; letter-spacing: .3px; }
+    .hero-right { display: flex; gap: 12px; align-items: center; }
+    .hero-date-box {
+        text-align: center; background: rgba(255,255,255,.07);
+        border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+        padding: 12px 20px;
+    }
+    .hero-date-box .hd-day  { font-size: 30px; font-weight: 900; color: #fff; line-height: 1; }
+    .hero-date-box .hd-rest { font-size: 10px; color: rgba(255,255,255,.5); margin-top: 3px; letter-spacing: .5px; text-transform: uppercase; }
+    .hero-mini-stat {
+        background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+        border-radius: 12px; padding: 12px 20px; text-align: center; min-width: 90px;
+    }
+    .hero-mini-stat .hms-val { font-size: 26px; font-weight: 900; color: var(--primary); line-height: 1; }
+    .hero-mini-stat .hms-lbl { font-size: 9px; color: rgba(255,255,255,.5); margin-top: 3px; letter-spacing: .8px; text-transform: uppercase; }
+
+    /* ── KPI cards ──────────────────────────────────────── */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 14px; margin-bottom: 20px;
+    }
+    .kpi-card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 14px; padding: 18px 18px 14px;
+        box-shadow: var(--card-shadow); position: relative; overflow: hidden;
+        transition: transform .18s, box-shadow .18s;
+    }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,.11); }
+    .kpi-card::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+        background: var(--kc); border-radius: 14px 14px 0 0;
+    }
+    .kpi-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+    .kpi-icon {
+        width: 44px; height: 44px; border-radius: 11px;
+        background: var(--kc-bg); display: flex; align-items: center;
+        justify-content: center; font-size: 20px; color: var(--kc);
+    }
+    .kpi-tag {
+        font-size: 9px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+        padding: 3px 8px; border-radius: 20px; background: var(--kc-bg); color: var(--kc);
+    }
+    .kpi-num  { font-size: 36px; font-weight: 900; color: var(--text-main); line-height: 1; letter-spacing: -1.5px; }
+    .kpi-lbl  { font-size: 10px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+    .kpi-sub  { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+    .kpi-sub strong { color: var(--kc); font-weight: 700; }
+    .kpi-prog { margin-top: 10px; }
+    .kpi-prog-bar { height: 4px; background: var(--surface-3); border-radius: 4px; overflow: hidden; }
+    .kpi-prog-bar-fill { height: 100%; background: var(--kc); border-radius: 4px; transition: width .6s ease; }
+    .kpi-prog-lbl { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Sección de gráficas ────────────────────────────── */
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .charts-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media(max-width:1100px){ .charts-row { grid-template-columns: 1fr; } }
+    @media(max-width:860px){  .charts-row-3 { grid-template-columns: 1fr 1fr; } }
+    @media(max-width:560px){  .charts-row-3 { grid-template-columns: 1fr; } }
+
+    .dash-card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 14px; padding: 20px 22px; box-shadow: var(--card-shadow);
+    }
+    .dash-card-hdr {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 18px;
+    }
+    .dash-card-title {
+        font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-muted); display: flex; align-items: center; gap: 7px;
+    }
+    .dash-card-title i { font-size: 13px; color: var(--primary); }
+    .dash-card-badge {
+        font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+        background: var(--c-gold-bg); color: var(--primary); letter-spacing: .5px;
+    }
+
+    /* ── Tabla de especialidades ────────────────────────── */
+    .esp-table { width: 100%; border-collapse: collapse; }
+    .esp-table td { padding: 7px 0; font-size: 12px; }
+    .esp-table td:first-child { color: var(--text-main); font-weight: 600; width: 40%; }
+    .esp-table td:nth-child(2) { width: 50%; padding: 0 12px; }
+    .esp-table td:last-child { color: var(--text-muted); font-weight: 700; font-size: 13px; text-align: right; width: 10%; }
+    .esp-bar-track { height: 6px; background: var(--surface-3); border-radius: 6px; overflow: hidden; }
+    .esp-bar-fill  { height: 100%; border-radius: 6px; }
+    .esp-table tr + tr td { border-top: 1px solid var(--surface-3); padding-top: 8px; }
+
+    /* ── Panel de personal ──────────────────────────────── */
+    .personal-list { display: flex; flex-direction: column; gap: 12px; }
+    .personal-item { display: flex; align-items: center; gap: 12px; }
+    .personal-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+    .personal-info { flex: 1; }
+    .personal-name { font-size: 12px; font-weight: 700; color: var(--text-main); }
+    .personal-bar-wrap { height: 5px; background: var(--surface-3); border-radius: 5px; overflow: hidden; margin-top: 4px; }
+    .personal-bar-fill { height: 100%; border-radius: 5px; }
+    .personal-val  { font-size: 18px; font-weight: 900; color: var(--text-main); flex-shrink: 0; min-width: 32px; text-align: right; }
+
+    /* ── Acciones rápidas ───────────────────────────────── */
+    .actions-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+    .action-btn {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        padding: 14px 8px; border-radius: 11px; border: 1px solid var(--border);
+        background: var(--surface-1); color: var(--text-main); text-decoration: none;
+        font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+        transition: all .18s; text-align: center; cursor: pointer;
+    }
+    .action-btn .ab-icon {
+        width: 40px; height: 40px; border-radius: 10px; background: var(--c-gold-bg);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; color: var(--primary); transition: transform .18s;
+    }
+    .action-btn:hover { border-color: var(--primary); background: var(--c-gold-bg); color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+    .action-btn:hover .ab-icon { transform: scale(1.12); }
+
+    /* ── Vacunas / alertas ──────────────────────────────── */
+    .alert-item {
+        display: flex; align-items: center; gap: 12px; padding: 10px 0;
+        border-bottom: 1px solid var(--surface-3);
+    }
+    .alert-item:last-child { border-bottom: none; }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* canvas */
+    .chart-wrap { position: relative; width: 100%; }
+
+    /* Empty state */
+    .empty-mini { text-align: center; padding: 30px 0; color: var(--text-muted); font-size: 12px; }
+    .empty-mini i { font-size: 28px; display: block; margin-bottom: 7px; color: var(--primary); opacity:.5; }
+</style>
+
+<!-- ══ HERO ══════════════════════════════════════════════ -->
+<div class="dash-hero">
+    <div class="hero-inner">
+        <div class="hero-left">
+            <h1>Bienvenido, <span>{{ session.nombre_usuario }}</span></h1>
+            <p>
+                {% if session.rol == 'super_admin' %}
+                    Panel de control global · Acceso completo al sistema
+                {% else %}
+                    Panel de control · {{ session.nombre_entidad or 'Tu entidad' }}
+                {% endif %}
+            </p>
+        </div>
+        <div class="hero-right">
+            {% if session.rol == 'super_admin' and stats.total_entidades %}
+            <div class="hero-mini-stat">
+                <div class="hms-val">{{ stats.total_entidades }}</div>
+                <div class="hms-lbl">Entidades</div>
+            </div>
+            {% endif %}
+            <div class="hero-mini-stat">
+                <div class="hms-val">{{ stats.total_sesiones or 0 }}</div>
+                <div class="hms-lbl">Sesiones</div>
+            </div>
+            <div class="hero-date-box">
+                <div class="hd-day" id="ddDay">—</div>
+                <div class="hd-rest" id="ddRest">cargando…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ KPI CARDS ═════════════════════════════════════════ -->
+<div class="kpi-grid">
+
+    <!-- Caninos activos -->
+    {% set pct_activos = ((stats.caninos_activos or 0) * 100 // stats.total_caninos) if stats.total_caninos else 0 %}
+    <div class="kpi-card" style="--kc:var(--c-green);--kc-bg:var(--c-green-bg);">
+        <div class="kpi-head">
+            <div class="kpi-icon"><i class="bi bi-shield-fill-check"></i></div>
+            <span class="kpi-tag">Operativos</span>
+        </div>
+        <div class="kpi-num">{{ stats.caninos_activos or 0 }}</div>
+        <div class="kpi-lbl">Caninos Activos</div>
+        <div class="kpi-sub">De <strong>{{ stats.total_caninos or 0 }}</strong> registrados · <strong>{{ stats.caninos_baja or 0 }}</strong> de baja</div>
+        <div class="kpi-prog">
+            <div class="kpi-prog-bar"><div class="kpi-prog-bar-fill" style="width:{{ pct_activos }}%"></div></div>
+            <div class="kpi-prog-lbl"><span>Activos</span><span>{{ pct_activos }}%</span></div>
+        </div>
+    </div>
+
+    <!-- Caninos en entrenamiento -->
+    <div class="kpi-card" style="--kc:var(--c-blue);--kc-bg:var(--c-blue-bg);">
+        <div class="kpi-head">
+            <div class="kpi-icon"><i class="bi bi-award-fill"></i></div>
+            <span class="kpi-tag">K9</span>
+        </div>
+        <div class="kpi-num">{{ stats.caninos_entren or 0 }}</div>
+        <div class="kpi-lbl">En Entrenamiento</div>
+        <div class="kpi-sub">Total K9: <strong>{{ stats.total_caninos or 0 }}</strong> unidades registradas</div>
+    </div>
+
+    <!-- Guías -->
+    <div class="kpi-card" style="--kc:var(--c-gold);--kc-bg:var(--c-gold-bg);">
+        <div class="kpi-head">
+            <div class="kpi-icon"><i class="bi bi-person-badge-fill"></i></div>
+            <span class="kpi-tag">Personal</span>
+        </div>
+        <div class="kpi-num">{{ stats.total_guias or 0 }}</div>
+        <div class="kpi-lbl">Guías K9</div>
+        <div class="kpi-sub">Personal certificado operativo</div>
+    </div>
+
+    <!-- Sesiones academia -->
+    <div class="kpi-card" style="--kc:var(--c-purple);--kc-bg:var(--c-purple-bg);">
+        <div class="kpi-head">
+            <div class="kpi-icon"><i class="bi bi-mortarboard-fill"></i></div>
+            <span class="kpi-tag">Academia</span>
+        </div>
+        <div class="kpi-num">{{ stats.total_sesiones or 0 }}</div>
+        <div class="kpi-lbl">Sesiones Totales</div>
+        <div class="kpi-sub"><strong>{{ stats.sesiones_por_esp | length if stats.sesiones_por_esp else 0 }}</strong> especialidad(es) activas</div>
+    </div>
+
+    <!-- Visión IA -->
+    {% set pct_vis = stats.pct_transcripcion or 0 %}
+    <div class="kpi-card" style="--kc:var(--c-teal);--kc-bg:var(--c-teal-bg);">
+        <div class="kpi-head">
+            <div class="kpi-icon"><i class="bi bi-camera-video-fill"></i></div>
+            <span class="kpi-tag">IA</span>
+        </div>
+        <div class="kpi-num">{{ stats.total_vision or 0 }}</div>
+        <div class="kpi-lbl">Archivos Visión</div>
+        <div class="kpi-sub"><strong>{{ stats.con_transcripcion or 0 }}</strong> transcritos por IA</div>
+        <div class="kpi-prog">
+            <div class="kpi-prog-bar"><div class="kpi-prog-bar-fill" style="width:{{ pct_vis }}%"></div></div>
+            <div class="kpi-prog-lbl"><span>Transcritos</span><span>{{ pct_vis }}%</span></div>
+        </div>
+    </div>
+
+    <!-- Usuarios -->
+    <div class="kpi-card" style="--kc:var(--c-orange);--kc-bg:var(--c-orange-bg);">
+        <div class="kpi-head">
+            <div class="kpi-icon"><i class="bi bi-people-fill"></i></div>
+            <span class="kpi-tag">{{ 'Sistema' if session.rol == 'super_admin' else 'Entidad' }}</span>
+        </div>
+        <div class="kpi-num">{{ stats.total_usuarios or 0 }}</div>
+        <div class="kpi-lbl">Usuarios</div>
+        <div class="kpi-sub">Cuentas activas en el sistema</div>
+    </div>
+
+</div>
+
+<!-- ══ FILA 1: Sesiones por especialidad + Gráfica dona ═ -->
+<div class="charts-row">
+
+    <!-- Sesiones por especialidad con mini tabla de barras -->
+    <div class="dash-card">
+        <div class="dash-card-hdr">
+            <div class="dash-card-title"><i class="bi bi-bar-chart-fill"></i> Sesiones por Especialidad</div>
+            <span class="dash-card-badge">{{ stats.total_sesiones or 0 }} total</span>
+        </div>
+        {% if stats.sesiones_por_esp %}
+        <div class="chart-wrap" style="height:200px; margin-bottom:20px;">
+            <canvas id="chartSesiones"></canvas>
+        </div>
+        {% set esp_max = stats.sesiones_por_esp.values() | max %}
+        <table class="esp-table">
+            {% set NOMBRES = {'drogas':'Detección Drogas','explosivos':'Explosivos','rescate':'Búsqueda y Rescate','seguridad':'Seguridad','rastreo':'Rastreo','personas':'Det. Personas','multiple':'Múltiple','vision':'Visión IA','narcoticos':'Narcóticos','guardia':'Guardia','cadaver':'Cadáver'} %}
+            {% set ESP_COLORS = ['#3b82f6','#22c55e','#8b5cf6','#ef4444','#f97316','#14b8a6','#e6b800','#64748b'] %}
+            {% for k, v in stats.sesiones_por_esp.items() %}
+            {% set pct = (v * 100 // esp_max) if esp_max else 0 %}
+            <tr>
+                <td>{{ NOMBRES.get(k, k | title) }}</td>
+                <td><div class="esp-bar-track"><div class="esp-bar-fill" style="width:{{ pct }}%;background:{{ ESP_COLORS[loop.index0 % ESP_COLORS | length] }};"></div></div></td>
+                <td>{{ v }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <div class="empty-mini"><i class="bi bi-inbox"></i>Sin sesiones registradas aún</div>
+        {% endif %}
+    </div>
+
+    <!-- Dona transcripciones + personal -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+        <div class="dash-card" style="flex:1;">
+            <div class="dash-card-hdr">
+                <div class="dash-card-title"><i class="bi bi-pie-chart-fill"></i> Visión IA</div>
+            </div>
+            <div class="chart-wrap" style="height:160px; display:flex; align-items:center; justify-content:center;">
+                <canvas id="chartVision" style="max-height:150px; max-width:150px;"></canvas>
+            </div>
+            <div style="display:flex;gap:12px;justify-content:center;margin-top:10px;font-size:11px;color:var(--text-muted);">
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#14b8a6;margin-right:4px;"></span>Transcritos</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dde3ec;margin-right:4px;"></span>Pendientes</span>
+            </div>
+        </div>
+
+        <div class="dash-card" style="flex:1;">
+            <div class="dash-card-hdr">
+                <div class="dash-card-title"><i class="bi bi-people-fill"></i> Personal</div>
+            </div>
+            {% set max_pers = [stats.total_caninos or 0, stats.total_guias or 0, stats.total_usuarios or 0] | max %}
+            <div class="personal-list">
+                {% set items = [
+                    ('Caninos K9',  stats.total_caninos or 0,  '#22c55e', 'bi-shield-fill',       'var(--c-green-bg)'),
+                    ('Guías K9',    stats.total_guias or 0,    '#e6b800', 'bi-person-badge-fill', 'var(--c-gold-bg)'),
+                    ('Usuarios',    stats.total_usuarios or 0, '#f97316', 'bi-people-fill',       'var(--c-orange-bg)'),
+                ] %}
+                {% for nombre, val, color, icono, iconbg in items %}
+                {% set pct_p = (val * 100 // max_pers) if max_pers else 0 %}
+                <div class="personal-item">
+                    <div class="personal-icon" style="background:{{ iconbg }};color:{{ color }};"><i class="bi {{ icono }}"></i></div>
+                    <div class="personal-info">
+                        <div class="personal-name">{{ nombre }}</div>
+                        <div class="personal-bar-wrap"><div class="personal-bar-fill" style="width:{{ pct_p }}%;background:{{ color }};"></div></div>
+                    </div>
+                    <div class="personal-val">{{ val }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ══ FILA 2: Acciones rápidas ═════════════════════════ -->
+<div class="dash-card">
+    <div class="dash-card-hdr">
+        <div class="dash-card-title"><i class="bi bi-lightning-fill"></i> Acciones Rápidas</div>
+    </div>
+    <div class="actions-grid">
+        {% if session.rol == 'super_admin' %}
+        <a href="/RegistroEntidad" class="action-btn"><div class="ab-icon"><i class="bi bi-building-fill-add"></i></div>Nueva Entidad</a>
+        <a href="/entidades"       class="action-btn"><div class="ab-icon"><i class="bi bi-buildings-fill"></i></div>Entidades</a>
+        {% endif %}
+        <a href="/caninos"         class="action-btn"><div class="ab-icon"><i class="bi bi-shield-fill-check"></i></div>Caninos K9</a>
+        <a href="/gestion-guias"   class="action-btn"><div class="ab-icon"><i class="bi bi-person-badge-fill"></i></div>Guías K9</a>
+        <a href="/usuarios"        class="action-btn"><div class="ab-icon"><i class="bi bi-people-fill"></i></div>Usuarios</a>
+        <a href="/salud-canina"    class="action-btn"><div class="ab-icon"><i class="bi bi-heart-pulse-fill"></i></div>Salud Canina</a>
+        <a href="/cursos"          class="action-btn"><div class="ab-icon"><i class="bi bi-mortarboard-fill"></i></div>Academia K9</a>
+        <a href="/notificaciones"  class="action-btn"><div class="ab-icon"><i class="bi bi-bell-fill"></i></div>Notificaciones</a>
+        <a href="/geolocalizacion" class="action-btn"><div class="ab-icon"><i class="bi bi-geo-alt-fill"></i></div>Geolocaliz.</a>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+var COLORS = ['#3b82f6','#22c55e','#8b5cf6','#ef4444','#f97316','#14b8a6','#e6b800','#64748b'];
+var textCol = 'rgba(90,107,132,.7)';
+var gridCol = 'rgba(0,0,0,.06)';
+
+Chart.defaults.font.family = "'Segoe UI', sans-serif";
+Chart.defaults.font.size   = 11;
+Chart.defaults.color       = textCol;
+
+/* ─── Sesiones por especialidad ─────────────────────── */
+var ESP_NAMES = {
+    drogas:'Drogas', explosivos:'Explosivos', rescate:'Rescate',
+    seguridad:'Seguridad', rastreo:'Rastreo', personas:'Personas',
+    multiple:'Múltiple', vision:'Visión', narcoticos:'Narcóticos',
+    guardia:'Guardia', cadaver:'Cadáver'
+};
+var sesEspData = {{ stats.sesiones_por_esp | tojson }};
+var espLabels  = Object.keys(sesEspData).map(function(k){ return ESP_NAMES[k] || k; });
+var espVals    = Object.values(sesEspData);
+var espColors  = espLabels.map(function(_,i){ return COLORS[i % COLORS.length]; });
+
+{% if stats.sesiones_por_esp %}
+new Chart(document.getElementById('chartSesiones'), {
+    type: 'bar',
+    data: {
+        labels: espLabels,
+        datasets: [{
+            label: 'Sesiones',
+            data:  espVals,
+            backgroundColor: espColors.map(function(c){ return c + 'bb'; }),
+            borderColor: espColors,
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+            label: function(ctx){ return ' ' + ctx.parsed.y + ' sesión' + (ctx.parsed.y !== 1 ? 'es' : ''); }
+        }}},
+        scales: {
+            x: { grid: { color: gridCol }, ticks: { color: textCol } },
+            y: { grid: { color: gridCol }, ticks: { color: textCol, stepSize: 1 }, beginAtZero: true }
+        }
+    }
+});
+{% endif %}
+
+/* ─── Dona visión IA ─────────────────────────────────── */
+var vTotal = {{ stats.total_vision or 0 }};
+var vTrans = {{ stats.con_transcripcion or 0 }};
+var vSin   = Math.max(0, vTotal - vTrans);
+new Chart(document.getElementById('chartVision'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Transcritos', 'Pendientes'],
+        datasets: [{
+            data: vTotal > 0 ? [vTrans, vSin] : [0, 0, 1],
+            backgroundColor: vTotal > 0 ? ['#14b8a6', '#dde3ec'] : ['#e2e8f0'],
+            borderWidth: 0,
+            hoverOffset: 8
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '72%',
+        plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: function(ctx){
+                var pct = vTotal > 0 ? Math.round(ctx.parsed / vTotal * 100) : 0;
+                return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
+            }}}
+        }
+    }
+});
+
+/* ─── Fecha ──────────────────────────────────────────── */
+(function(){
+    var M = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    var D = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    var n = new Date();
+    document.getElementById('ddDay').textContent  = n.getDate();
+    document.getElementById('ddRest').textContent = D[n.getDay()] + ' · ' + M[n.getMonth()] + ' ' + n.getFullYear();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,1004 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<style>
+    /* ── Cabecera ─────────────────────────────────── */
+    .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+    .page-header h1 { font-size:22px; font-weight:800; color:var(--text-main); letter-spacing:1px; }
+    .page-header .sub { font-size:12px; color:var(--text-muted); margin-top:3px; }
+    .page-header-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+    /* ── Toggle vista ─────────────────────────────── */
+    .vista-toggle { display:flex; background:var(--surface-2); border:1px solid var(--card-border); border-radius:8px; overflow:hidden; }
+    .vista-btn { padding:7px 11px; border:none; background:transparent; color:var(--text-muted); cursor:pointer; font-size:14px; transition:.18s; }
+    .vista-btn:hover { background:var(--surface-1); color:var(--text-main); }
+    .vista-btn.active { background:var(--primary); color:#000; }
+
+    /* ── Filtros ──────────────────────────────────── */
+    .filter-bar { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:14px 18px; margin-bottom:24px; box-shadow:var(--card-shadow); }
+    .filter-group { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .filter-label { font-size:11px; font-weight:700; color:var(--text-muted); letter-spacing:.5px; white-space:nowrap; }
+    .filter-input-wrap { position:relative; }
+    .filter-input-wrap i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13px; pointer-events:none; }
+    .filter-input { padding:8px 12px 8px 32px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); width:210px; transition:.18s; }
+    .filter-input:focus { outline:none; border-color:var(--primary); background:var(--input-focus-bg); }
+    .filter-select { padding:8px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); cursor:pointer; }
+    .filter-select:focus { outline:none; border-color:var(--primary); }
+    .filter-clear { padding:8px 14px; border:1px solid var(--border); border-radius:7px; font-size:12px; background:transparent; color:var(--text-muted); cursor:pointer; transition:.18s; display:flex; align-items:center; gap:5px; }
+    .filter-clear:hover { background:#fee2e2; border-color:#fca5a5; color:#dc2626; }
+    .filter-count { font-size:12px; color:var(--text-muted); margin-top:8px; margin-bottom:0; }
+
+    /* ── Botón nuevo ──────────────────────────────── */
+    .btn-nuevo { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; background:var(--primary); color:#000; font-size:12px; font-weight:700; letter-spacing:.6px; border:none; border-radius:8px; cursor:pointer; text-transform:uppercase; transition:.18s; text-decoration:none; }
+    .btn-nuevo:hover { background:var(--primary-hover); transform:translateY(-1px); }
+
+    /* ── Tabla caninos ──────────────────────────── */
+    .table-wrap { background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; box-shadow:var(--card-shadow); overflow:hidden; overflow-x:auto; }
+    .caninos-table { width:100%; border-collapse:collapse; min-width:860px; }
+    .caninos-table thead th { padding:11px 14px; font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--text-muted); background:var(--surface-1); border-bottom:1px solid var(--card-border); white-space:nowrap; }
+    .caninos-table thead th:first-child { padding-left:18px; }
+    .caninos-table thead th:last-child  { padding-right:18px; text-align:center; }
+
+    .canino-row { border-bottom:1px solid var(--card-border); transition:background .15s; }
+    .canino-row:last-child { border-bottom:none; }
+    .canino-row:hover { background:var(--surface-1); }
+    .canino-row td { padding:13px 14px; vertical-align:middle; font-size:13px; color:var(--text-main); }
+    .canino-row td:first-child { padding-left:18px; }
+    .canino-row td:last-child  { padding-right:18px; }
+
+    /* Celda foto + nombre */
+    .td-canino { display:flex; align-items:center; gap:12px; }
+    .canino-foto { width:44px; height:44px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); flex-shrink:0; }
+    .canino-foto-ph { width:44px; height:44px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-muted); flex-shrink:0; }
+    .canino-nombre { font-size:14px; font-weight:700; color:var(--text-main); line-height:1.2; }
+    .canino-raza   { font-size:11px; color:var(--text-muted); font-style:italic; }
+
+    /* Badges */
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; letter-spacing:.4px; }
+    .badge-activo        { background:#dcfce7; color:#16a34a; }
+    .badge-entrenamiento { background:#dbeafe; color:#1d4ed8; }
+    .badge-retirado      { background:#fef3c7; color:#92400e; }
+    .badge-baja          { background:#fee2e2; color:#991b1b; }
+    .badge-esp           { background:var(--surface-2); color:var(--text-main); border:1px solid var(--card-border); }
+
+    /* Guía pill en tabla */
+    .guia-pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-main); font-weight:600; white-space:nowrap; }
+    .guia-pill .mini-foto { width:24px; height:24px; border-radius:50%; object-fit:cover; border:1px solid var(--primary); }
+    .guia-pill .mini-ph   { width:24px; height:24px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--text-muted); border:1px solid var(--card-border); }
+
+    /* Botones de acción — icon-only 32×32 */
+    .btn-icon { width:32px; height:32px; border-radius:6px; border:1px solid; background:transparent; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:13px; transition:.18s; text-decoration:none; }
+    .btn-icon-edit { border-color:#22c55e; color:#22c55e; }
+    .btn-icon-edit:hover { background:#22c55e; color:#fff; }
+    .btn-icon-del  { border-color:#ef4444; color:#ef4444; }
+    .btn-icon-del:hover  { background:#ef4444; color:#fff; }
+    .btn-icon-hist { border-color:#6b7280; color:var(--text-muted); }
+    .btn-icon-hist:hover { background:var(--surface-2); color:var(--text-main); }
+    .td-actions { display:flex; gap:7px; justify-content:center; }
+
+    /* Filas de baja */
+    .canino-row.baja { background:rgba(239,68,68,.04); }
+    .canino-row.baja:hover { background:rgba(239,68,68,.08); }
+    .canino-row.baja .canino-foto,
+    .canino-row.baja .canino-foto-ph { filter:grayscale(70%); border-color:#ef4444; opacity:.8; }
+    .baja-meta { font-size:11px; color:var(--text-muted); line-height:1.5; }
+    .baja-meta strong { color:#ef4444; }
+
+    /* Estado vacío */
+    .empty-state { text-align:center; padding:70px 20px; color:var(--text-muted); }
+    .empty-state i { font-size:52px; margin-bottom:14px; display:block; }
+    .td-muted { color:var(--text-muted); font-size:12px; }
+
+    /* ── Grid de tarjetas ─────────────────────────── */
+    .can-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:18px; }
+
+    .can-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; box-shadow:var(--card-shadow); overflow:hidden; transition:transform .15s, box-shadow .15s; display:flex; flex-direction:column; }
+    .can-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.12); }
+    .can-card.baja { background:rgba(239,68,68,.04); border-color:#fca5a5; }
+
+    .can-card-top { padding:20px 16px 14px; display:flex; flex-direction:column; align-items:center; gap:8px; border-bottom:1px solid var(--card-border); }
+    .can-card-foto { width:72px; height:72px; border-radius:50%; object-fit:cover; border:3px solid var(--primary); }
+    .can-card-foto-ph { width:72px; height:72px; border-radius:50%; background:var(--surface-2); border:3px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--text-muted); }
+    .can-card.baja .can-card-foto,
+    .can-card.baja .can-card-foto-ph { filter:grayscale(70%); border-color:#ef4444; opacity:.8; }
+    .can-card-nombre { font-size:15px; font-weight:800; color:var(--text-main); text-align:center; line-height:1.2; }
+    .can-card-raza { font-size:11px; color:var(--text-muted); font-style:italic; text-align:center; }
+
+    .can-card-body { padding:12px 16px; display:flex; flex-direction:column; gap:7px; flex:1; }
+    .can-card-row { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text-muted); }
+    .can-card-row i { width:14px; text-align:center; font-size:11px; color:var(--primary); flex-shrink:0; }
+    .can-card-row span { color:var(--text-main); font-weight:600; }
+
+    .can-card-foot { padding:10px 14px; border-top:1px solid var(--card-border); display:flex; justify-content:flex-end; align-items:center; gap:7px; }
+
+    /* ── MODAL ────────────────────────────────────── */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+
+    .modal-box { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; width:100%; max-width:800px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px 16px; border-bottom:1px solid var(--card-border); position:sticky; top:0; background:var(--card-bg); z-index:1; }
+    .modal-header h2 { font-size:17px; font-weight:800; color:var(--text-main); }
+    .modal-close { background:none; border:none; font-size:22px; cursor:pointer; color:var(--text-muted); line-height:1; transition:.15s; }
+    .modal-close:hover { color:#ef4444; }
+
+    .modal-body { padding:24px; }
+
+    /* Secciones del formulario */
+    .form-section { margin-bottom:22px; }
+    .form-section-title { font-size:11px; font-weight:700; letter-spacing:1px; color:var(--primary); text-transform:uppercase; padding-bottom:8px; border-bottom:1px solid var(--card-border); margin-bottom:14px; display:flex; align-items:center; gap:6px; }
+
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+    .span-2 { grid-column:span 2; }
+    .span-3 { grid-column:span 3; }
+
+    .form-group { display:flex; flex-direction:column; gap:5px; }
+    .form-group label { font-size:11px; font-weight:600; color:var(--text-muted); letter-spacing:.4px; text-transform:uppercase; }
+    .form-group input,
+    .form-group select,
+    .form-group textarea { padding:9px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; background:var(--surface-1); color:var(--text-main); transition:.18s; width:100%; }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus { outline:none; border-color:var(--primary); background:var(--input-focus-bg); }
+    .form-group textarea { resize:vertical; min-height:80px; }
+    .req { color:#ef4444; font-weight:700; margin-left:2px; }
+
+    /* Foto preview en modal */
+    .foto-preview-wrap { display:flex; align-items:center; gap:14px; }
+    .foto-preview { width:70px; height:70px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); }
+    .foto-ph { width:70px; height:70px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--text-muted); }
+
+    .modal-footer { padding:16px 24px; border-top:1px solid var(--card-border); display:flex; justify-content:flex-end; gap:10px; position:sticky; bottom:0; background:var(--card-bg); }
+    .btn-cancel { padding:10px 20px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:13px; cursor:pointer; transition:.18s; }
+    .btn-cancel:hover { background:var(--surface-2); }
+    .btn-save   { padding:10px 24px; background:var(--primary); border:none; border-radius:8px; color:#000; font-size:13px; font-weight:700; cursor:pointer; transition:.18s; display:flex; align-items:center; gap:6px; }
+    .btn-save:hover { background:var(--primary-hover); }
+
+    /* ── Tooltip informativo ─────────────────────── */
+    .tip-wrap { position:relative; display:inline-flex; align-items:center; cursor:help; margin-left:5px; vertical-align:middle; }
+    .tip-wrap i { color:var(--primary); font-size:11px; }
+    .tip-box {
+        position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%);
+        background:#1a2540; color:#f0f4ff; font-size:11px; line-height:1.55;
+        padding:8px 11px; border-radius:8px; width:230px;
+        pointer-events:none; opacity:0; transition:opacity .2s;
+        z-index:200; text-align:left; font-weight:400; letter-spacing:0; text-transform:none;
+        box-shadow:0 4px 14px rgba(0,0,0,.35);
+    }
+    .tip-box::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:5px solid transparent; border-top-color:#1a2540; }
+    .tip-wrap:hover .tip-box { opacity:1; }
+
+    @media(max-width:600px) {
+        .form-grid-2, .form-grid-3 { grid-template-columns:1fr; }
+        .span-2, .span-3 { grid-column:span 1; }
+    }
+</style>
+
+<!-- ═══════════════════════ CABECERA ═══════════════════════ -->
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-shield-dog-fill" style="color:var(--primary); margin-right:8px;"></i>CANINOS K9</h1>
+        <div class="sub">Unidades caninas operativas — gestión y seguimiento</div>
+    </div>
+    <div class="page-header-right">
+        <div class="vista-toggle">
+            <button class="vista-btn active" id="btnVistaTbl" onclick="setVistaCaninos('tabla')" title="Vista tabla"><i class="bi bi-table"></i></button>
+            <button class="vista-btn" id="btnVistaCards" onclick="setVistaCaninos('cards')" title="Vista tarjetas"><i class="bi bi-grid-fill"></i></button>
+        </div>
+        <button class="btn-nuevo" onclick="abrirModalNuevo()">
+            <i class="bi bi-plus-circle-fill"></i> NUEVO CANINO
+        </button>
+    </div>
+</div>
+
+<!-- ═══════════════════════ ALERTAS ═══════════════════════ -->
+{% if flash_ok %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({ icon:'success', title:'¡Registrado!', text:{{ flash_ok | tojson }}, timer:3000, showConfirmButton:false, toast:true, position:'top-end' });
+});
+</script>
+{% endif %}
+{% if form_error %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({ icon:'error', title:'Error', text:{{ form_error | tojson }}, confirmButtonColor:'#b8860b' });
+});
+</script>
+{% endif %}
+
+<!-- ═══════════════════════ FILTROS ════════════════════════ -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <span class="filter-label"><i class="bi bi-funnel-fill"></i> Filtrar:</span>
+
+        <div class="filter-input-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="filtroTexto" class="filter-input" placeholder="Nombre o chip..." oninput="filtrarCaninos()">
+        </div>
+
+        {% if session.rol == 'super_admin' %}
+        <select id="filtroEntidad" class="filter-select" onchange="filtrarCaninos()">
+            <option value="">Todas las entidades</option>
+            {% for ent in entidades %}
+            <option value="{{ ent.id }}">{{ ent.razon_social }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
+        <select id="filtroEstado" class="filter-select" onchange="filtrarCaninos()">
+            <option value="">Todos los estados</option>
+            <option value="activo">Activo</option>
+            <option value="entrenamiento">En Entrenamiento</option>
+            <option value="retirado">Retirado</option>
+            <option value="baja">Dado de baja</option>
+        </select>
+
+        <select id="filtroEsp" class="filter-select" onchange="filtrarCaninos()">
+            <option value="">Todas las especialidades</option>
+            <option value="drogas">Detección de Drogas</option>
+            <option value="explosivos">Detección de Explosivos</option>
+            <option value="rescate">Búsqueda y Rescate</option>
+            <option value="seguridad">Seguridad y Protección</option>
+            <option value="rastreo">Rastreo y Seguimiento</option>
+            <option value="personas">Detección de Personas</option>
+            <option value="multiple">Múltiple</option>
+        </select>
+
+        <button class="filter-clear" onclick="limpiarFiltros()"><i class="bi bi-x-circle"></i> Limpiar</button>
+    </div>
+    <p class="filter-count" id="filtroResultados"></p>
+</div>
+
+{% if caninos %}
+
+<!-- ═══════════════════════ VISTA TABLA ════════════════════ -->
+<div id="caninosTabla">
+<div class="table-wrap">
+<table class="caninos-table" id="caninosGrid">
+    <thead>
+        <tr>
+            <th>Canino</th>
+            <th>Estado</th>
+            <th>Especialidad</th>
+            <th>Guía Asignado</th>
+            {% if session.rol == 'super_admin' %}<th>Entidad</th>{% endif %}
+            <th>Chip / Reg.</th>
+            <th>Nacimiento</th>
+            <th>Peso / Talla</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody id="caninosTbody">
+    {% for c in caninos %}
+    {% set est = c.estado or 'activo' %}
+    <tr class="canino-row{% if c.estado == 'baja' %} baja{% endif %}"
+        data-nombre="{{ c.nombre | lower }}"
+        data-chip="{{ c.chip_numero or '' }}"
+        data-entidad="{{ c.id_entidad or '' }}"
+        data-estado="{{ est }}"
+        data-esp="{{ c.especialidad or '' }}">
+
+        <!-- Foto + Nombre -->
+        <td>
+            <div class="td-canino">
+                {% if c.foto_path %}
+                <img src="/static/{{ c.foto_path }}" alt="Foto" class="canino-foto">
+                {% else %}
+                <div class="canino-foto-ph"><i class="bi bi-shield-dog-fill"></i></div>
+                {% endif %}
+                <div>
+                    <div class="canino-nombre">{{ c.nombre }}</div>
+                    <div class="canino-raza">{{ c.raza }}{% if c.genero %} · {{ '♂' if c.genero == 'macho' else '♀' }}{% endif %}</div>
+                </div>
+            </div>
+        </td>
+
+        <!-- Estado -->
+        <td>
+            {% if c.estado == 'baja' %}
+            <span class="badge badge-baja">Baja</span>
+            {% if c.motivo_baja or c.fecha_baja %}
+            <div class="baja-meta">
+                {% if c.motivo_baja %}<strong>{{ c.motivo_baja }}</strong>{% endif %}
+                {% if c.fecha_baja %}<br>{{ c.fecha_baja }}{% endif %}
+                {% if c.carta_baja_path %}
+                <br><a href="/static/{{ c.carta_baja_path }}" target="_blank" style="color:var(--primary); font-weight:600;"><i class="bi bi-file-earmark-pdf-fill"></i> Doc.</a>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <span class="badge badge-{{ est }}">
+                {{ {'activo':'Activo','entrenamiento':'En Entren.','retirado':'Retirado'}.get(est, est) }}
+            </span>
+            {% endif %}
+        </td>
+
+        <!-- Especialidad -->
+        <td>
+            {% if c.especialidad %}
+            <span class="badge badge-esp">{{ c.especialidad | title }}</span>
+            {% else %}
+            <span class="td-muted">—</span>
+            {% endif %}
+        </td>
+
+        <!-- Guía -->
+        <td>
+            {% if c.nombre_guia %}
+            <span style="font-size:12px; font-weight:600; color:var(--text-main);">{{ c.nombre_guia }}</span>
+            {% else %}
+            <span class="td-muted">Sin asignar</span>
+            {% endif %}
+        </td>
+
+        <!-- Entidad (solo super_admin) -->
+        {% if session.rol == 'super_admin' %}
+        <td><span style="font-size:12px;">{{ c.nombre_entidad or '—' }}</span></td>
+        {% endif %}
+
+        <!-- Chip / Registro -->
+        <td>
+            {% if c.chip_numero %}
+            <div style="font-size:12px; font-weight:600;">{{ c.chip_numero }}</div>
+            {% endif %}
+            {% if c.num_registro %}
+            <div class="td-muted">{{ c.num_registro }}</div>
+            {% endif %}
+            {% if not c.chip_numero and not c.num_registro %}
+            <span class="td-muted">—</span>
+            {% endif %}
+        </td>
+
+        <!-- Nacimiento -->
+        <td>
+            {% if c.fecha_nacimiento %}
+            <span style="font-size:12px;">{{ c.fecha_nacimiento }}</span>
+            {% else %}<span class="td-muted">—</span>{% endif %}
+        </td>
+
+        <!-- Peso / Talla -->
+        <td>
+            {% if c.peso_kg or c.talla_cm %}
+            <span style="font-size:12px;">
+                {% if c.peso_kg %}{{ c.peso_kg }} kg{% endif %}
+                {% if c.peso_kg and c.talla_cm %} · {% endif %}
+                {% if c.talla_cm %}{{ c.talla_cm }} cm{% endif %}
+            </span>
+            {% else %}<span class="td-muted">—</span>{% endif %}
+        </td>
+
+        <!-- Acciones -->
+        <td>
+            <div class="td-actions">
+                {% if c.estado != 'baja' %}
+                <button class="btn-icon btn-icon-edit" title="Editar" onclick="abrirModalEditar({{ c.id }})">
+                    <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn-icon btn-icon-del" title="Dar de baja" onclick="abrirModalBaja({{ c.id }}, '{{ c.nombre | e }}')">
+                    <i class="bi bi-slash-circle-fill"></i>
+                </button>
+                {% else %}
+                <a href="/salud-canina" class="btn-icon btn-icon-hist" title="Historial">
+                    <i class="bi bi-heart-pulse-fill"></i>
+                </a>
+                {% endif %}
+            </div>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+</div><!-- /#caninosTabla -->
+
+<!-- ═══════════════════════ VISTA TARJETAS ═════════════════ -->
+<div id="caninosCards" style="display:none;">
+<div class="can-grid" id="canCardsGrid">
+    {% for c in caninos %}
+    {% set est = c.estado or 'activo' %}
+    <div class="can-card{% if c.estado == 'baja' %} baja{% endif %}"
+         data-nombre="{{ c.nombre | lower }}"
+         data-chip="{{ c.chip_numero or '' }}"
+         data-entidad="{{ c.id_entidad or '' }}"
+         data-estado="{{ est }}"
+         data-esp="{{ c.especialidad or '' }}">
+
+        <div class="can-card-top">
+            {% if c.foto_path %}
+            <img src="/static/{{ c.foto_path }}" alt="Foto" class="can-card-foto">
+            {% else %}
+            <div class="can-card-foto-ph"><i class="bi bi-shield-dog-fill"></i></div>
+            {% endif %}
+            <div class="can-card-nombre">{{ c.nombre }}</div>
+            <div class="can-card-raza">{{ c.raza }}{% if c.genero %} · {{ '♂' if c.genero == 'macho' else '♀' }}{% endif %}</div>
+            {% if c.estado == 'baja' %}
+            <span class="badge badge-baja">Baja</span>
+            {% else %}
+            <span class="badge badge-{{ est }}">
+                {{ {'activo':'Activo','entrenamiento':'En Entren.','retirado':'Retirado'}.get(est, est) }}
+            </span>
+            {% endif %}
+        </div>
+
+        <div class="can-card-body">
+            {% if c.especialidad %}
+            <div class="can-card-row">
+                <i class="bi bi-shield-fill-check"></i>
+                <span>{{ c.especialidad | title }}</span>
+            </div>
+            {% endif %}
+            <div class="can-card-row">
+                <i class="bi bi-person-badge-fill"></i>
+                {% if c.nombre_guia %}
+                <span>{{ c.nombre_guia }}</span>
+                {% else %}
+                Sin guía asignado
+                {% endif %}
+            </div>
+            {% if c.chip_numero %}
+            <div class="can-card-row">
+                <i class="bi bi-upc-scan"></i>
+                <span>{{ c.chip_numero }}</span>
+            </div>
+            {% endif %}
+            {% if c.peso_kg or c.talla_cm %}
+            <div class="can-card-row">
+                <i class="bi bi-rulers"></i>
+                <span>
+                    {% if c.peso_kg %}{{ c.peso_kg }} kg{% endif %}
+                    {% if c.peso_kg and c.talla_cm %} · {% endif %}
+                    {% if c.talla_cm %}{{ c.talla_cm }} cm{% endif %}
+                </span>
+            </div>
+            {% endif %}
+            {% if session.rol == 'super_admin' and c.nombre_entidad %}
+            <div class="can-card-row">
+                <i class="bi bi-building-fill"></i>
+                <span>{{ c.nombre_entidad }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="can-card-foot">
+            {% if c.estado != 'baja' %}
+            <button class="btn-icon btn-icon-edit" title="Editar" onclick="abrirModalEditar({{ c.id }})">
+                <i class="bi bi-pencil-fill"></i>
+            </button>
+            <button class="btn-icon btn-icon-del" title="Dar de baja" onclick="abrirModalBaja({{ c.id }}, '{{ c.nombre | e }}')">
+                <i class="bi bi-slash-circle-fill"></i>
+            </button>
+            {% else %}
+            <a href="/salud-canina" class="btn-icon btn-icon-hist" title="Historial">
+                <i class="bi bi-heart-pulse-fill"></i>
+            </a>
+            {% endif %}
+        </div>
+
+    </div>
+    {% endfor %}
+</div>
+</div><!-- /#caninosCards -->
+
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-shield-dog"></i>
+    <p>No hay caninos K9 registrados{% if session.rol != 'super_admin' %} en tu entidad{% endif %}.</p>
+</div>
+{% endif %}
+
+<!-- ═══════════════════════ MODAL FORMULARIO ═══════════════ -->
+<div class="modal-overlay" id="modalCanino">
+<div class="modal-box">
+
+    <div class="modal-header">
+        <h2 id="modalTitulo">Nuevo <span style="color:var(--primary)">Canino K9</span></h2>
+        <button class="modal-close" onclick="cerrarModal()">&#x2715;</button>
+    </div>
+
+    <form id="formCanino" method="POST" enctype="multipart/form-data" action="/caninos/nuevo">
+    <div class="modal-body">
+
+        <!-- ── 1. Foto ──────────────────────────────────── -->
+        <div class="form-section">
+            <div class="form-section-title"><i class="bi bi-camera-fill"></i> Foto del Canino</div>
+            <div class="foto-preview-wrap">
+                <div class="foto-ph" id="fotoPreviewWrap">
+                    <i class="bi bi-shield-dog-fill"></i>
+                </div>
+                <div>
+                    <input type="file" id="foto_canino" name="foto_canino" accept="image/*" onchange="previsualizarFoto(this)" style="display:none">
+                    <button type="button" onclick="document.getElementById('foto_canino').click()"
+                            style="padding:8px 16px; border:1px dashed var(--primary); border-radius:7px; background:transparent; color:var(--primary); cursor:pointer; font-size:12px; font-weight:600;">
+                        <i class="bi bi-upload"></i> Seleccionar foto
+                    </button>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:5px;">JPG, PNG · máx 5 MB</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 2. Datos básicos ─────────────────────────── -->
+        <div class="form-section">
+            <div class="form-section-title"><i class="bi bi-info-circle-fill"></i> Datos Básicos</div>
+            <div class="form-grid-2">
+                <div class="form-group">
+                    <label>Nombre <span class="req">*</span></label>
+                    <input type="text" name="nombre" id="fNombre" required placeholder="Rex, Toby, Zeus…">
+                </div>
+                <div class="form-group">
+                    <label>Raza <span class="req">*</span></label>
+                    <input type="text" name="raza" id="fRaza" required placeholder="Pastor Alemán, Labrador…">
+                </div>
+                <div class="form-group">
+                    <label>Género <span class="req">*</span></label>
+                    <select name="genero" id="fGenero" required>
+                        <option value="">— Seleccionar —</option>
+                        <option value="macho">♂ Macho</option>
+                        <option value="hembra">♀ Hembra</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Nacimiento</label>
+                    <input type="date" name="fecha_nacimiento" id="fFechaNac">
+                </div>
+                <div class="form-group">
+                    <label>
+                        N° de Chip / Microchip
+                        <span class="tip-wrap">
+                            <i class="bi bi-info-circle-fill"></i>
+                            <div class="tip-box">Identificador único implantado bajo la piel del canino. Estándar ISO 11784/11785 — consta de 15 dígitos y permite rastrear al animal en cualquier veterinaria o entidad.</div>
+                        </span>
+                    </label>
+                    <input type="text" name="chip_numero" id="fChip" placeholder="985141002512345">
+                </div>
+                <div class="form-group">
+                    <label>
+                        N° de Registro Oficial
+                        <span class="tip-wrap">
+                            <i class="bi bi-info-circle-fill"></i>
+                            <div class="tip-box">Código asignado por la entidad o el registro oficial de unidades K9. Identifica al canino dentro del sistema organizacional y puede usarse en documentos legales y operativos.</div>
+                        </span>
+                    </label>
+                    <input type="text" name="num_registro" id="fNumReg" placeholder="REG-2024-001">
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 3. Características físicas ─────────────────── -->
+        <div class="form-section">
+            <div class="form-section-title"><i class="bi bi-rulers"></i> Características Físicas</div>
+            <div class="form-grid-3">
+                <div class="form-group">
+                    <label>Color / Pelaje</label>
+                    <input type="text" name="color_pelaje" id="fColor" placeholder="Negro y fuego">
+                </div>
+                <div class="form-group">
+                    <label>Peso (kg)</label>
+                    <input type="number" name="peso_kg" id="fPeso" step="0.1" min="0" placeholder="32.5">
+                </div>
+                <div class="form-group">
+                    <label>Talla (cm)</label>
+                    <input type="number" name="talla_cm" id="fTalla" min="0" placeholder="65">
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 4. Información operativa ────────────────────── -->
+        <div class="form-section">
+            <div class="form-section-title"><i class="bi bi-shield-fill-check"></i> Información Operativa</div>
+            <div class="form-grid-2">
+                <div class="form-group">
+                    <label>Especialidad <span class="req">*</span></label>
+                    <select name="especialidad" id="fEsp" required>
+                        <option value="">— Seleccionar —</option>
+                        <option value="drogas">Detección de Drogas</option>
+                        <option value="explosivos">Detección de Explosivos</option>
+                        <option value="rescate">Búsqueda y Rescate</option>
+                        <option value="seguridad">Seguridad y Protección</option>
+                        <option value="rastreo">Rastreo y Seguimiento</option>
+                        <option value="personas">Detección de Personas</option>
+                        <option value="multiple">Múltiple</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Estado <span class="req">*</span></label>
+                    <select name="estado" id="fEstado" required>
+                        <option value="activo">Activo</option>
+                        <option value="entrenamiento">En Entrenamiento</option>
+                        <option value="retirado">Retirado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Ingreso al Servicio</label>
+                    <input type="date" name="fecha_ingreso" id="fIngreso">
+                </div>
+                <div class="form-group">
+                    <label>Procedencia</label>
+                    <select name="procedencia" id="fProcedencia">
+                        <option value="">— Seleccionar —</option>
+                        <option value="Criado en la entidad">Criado en la entidad</option>
+                        <option value="Importado">Importado</option>
+                        <option value="Donado">Donado</option>
+                        <option value="Adquirido en subasta">Adquirido en subasta</option>
+                        <option value="Transferido de otra unidad">Transferido de otra unidad</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 5. Asignación ────────────────────────────────── -->
+        <div class="form-section">
+            <div class="form-section-title"><i class="bi bi-person-badge-fill"></i> Asignación</div>
+            <div class="form-grid-2">
+                {% if session.rol == 'super_admin' %}
+                <div class="form-group">
+                    <label>Entidad <span class="req">*</span></label>
+                    <select name="id_entidad" id="fEntidad" required onchange="cargarGuias()">
+                        <option value="">— Seleccionar entidad —</option>
+                        {% for ent in entidades %}
+                        <option value="{{ ent.id }}">{{ ent.razon_social }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% else %}
+                <input type="hidden" name="id_entidad" value="{{ session.id_entidad }}">
+                {% endif %}
+                <div class="form-group">
+                    <label>Guía Asignado</label>
+                    <select name="id_guia" id="fGuia">
+                        <option value="">— Sin guía asignado —</option>
+                        {% if session.rol != 'super_admin' %}
+                            {% for g in guias %}
+                            <option value="{{ g.id }}">{{ g.nombre }}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nota: vacunas e historial clínico se gestionan en el módulo Salud Canina -->
+        <div class="form-section">
+            <div class="form-section-title"><i class="bi bi-chat-text-fill"></i> Notas / Observaciones</div>
+            <div class="form-group">
+                <textarea name="observaciones" id="fObs" style="min-height:80px" placeholder="Condiciones especiales, alergias, notas operativas…"></textarea>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                <i class="bi bi-heart-pulse-fill" style="color:var(--primary)"></i>
+                Las vacunas y el historial clínico se registran en <a href="/salud-canina" style="color:var(--primary); font-weight:600;">Salud Canina</a>.
+            </p>
+        </div>
+
+    </div><!-- /modal-body -->
+
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+        <button type="submit" class="btn-save" id="btnGuardar">
+            <i class="bi bi-check-circle-fill"></i> <span id="btnGuardarTxt">Registrar Canino</span>
+        </button>
+    </div>
+    </form>
+
+</div>
+</div>
+
+<!-- ═══════════════════════ MODAL DAR DE BAJA ═══════════════ -->
+<div class="modal-overlay" id="modalBaja">
+<div class="modal-box" style="max-width:520px;">
+
+    <div class="modal-header" style="border-top:4px solid #ef4444; border-radius:14px 14px 0 0;">
+        <h2 id="modalBajaTitulo" style="color:#ef4444;">
+            <i class="bi bi-slash-circle-fill"></i> Dar de Baja — <span id="modalBajaNombre"></span>
+        </h2>
+        <button class="modal-close" onclick="cerrarModalBaja()">&#x2715;</button>
+    </div>
+
+    <form id="formBaja" method="POST" enctype="multipart/form-data" action="">
+    <div class="modal-body">
+
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:18px; line-height:1.6;">
+            El canino quedará marcado como <strong style="color:#ef4444;">BAJA</strong> y se conservará en el historial del sistema. Complete la información para dejar constancia oficial.
+        </p>
+
+        <div class="form-group" style="margin-bottom:14px;">
+            <label>Motivo de Baja <span class="req">*</span></label>
+            <select name="motivo_baja" id="bMotivo" required>
+                <option value="">— Seleccionar motivo —</option>
+                <option value="Jubilación por edad">Jubilación por edad (cumplió ciclo de servicio)</option>
+                <option value="Lesión o fractura grave">Lesión o fractura grave (incapacidad física)</option>
+                <option value="Fallecido en servicio">Fallecido en servicio</option>
+                <option value="Enfermedad grave">Enfermedad grave o diagnóstico terminal</option>
+                <option value="Otra causa">Otra causa</option>
+            </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+            <label>Fecha de Baja <span class="req">*</span></label>
+            <input type="date" name="fecha_baja" id="bFecha" required>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+            <label>Justificación Detallada <span class="req">*</span></label>
+            <textarea name="justificacion_baja" id="bJustificacion" required
+                      style="min-height:100px;"
+                      placeholder="Describa los antecedentes, diagnóstico médico, resolución o decisión que fundamenta la baja del canino…"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Carta / Documento Oficial de Baja <span style="color:var(--text-muted); font-weight:400;">(opcional — PDF)</span></label>
+            <input type="file" name="carta_baja" id="bCarta" accept=".pdf,application/pdf" style="display:none"
+                   onchange="actualizarLabelBaja(this)">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <button type="button"
+                        onclick="document.getElementById('bCarta').click()"
+                        style="display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border:1.5px dashed #ef4444; border-radius:8px; background:transparent; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer; transition:.18s; white-space:nowrap;"
+                        onmouseover="this.style.background='rgba(239,68,68,.08)'" onmouseout="this.style.background='transparent'">
+                    <i class="bi bi-file-earmark-arrow-up-fill"></i> Seleccionar PDF
+                </button>
+                <span id="bCartaLabel" style="font-size:12px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">Sin archivos seleccionados</span>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Resolución, acta veterinaria, o cualquier documento que oficialice la baja.</div>
+        </div>
+
+    </div>
+
+    <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="cerrarModalBaja()">Cancelar</button>
+        <button type="submit" style="padding:10px 24px; background:#ef4444; border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px;">
+            <i class="bi bi-slash-circle-fill"></i> Confirmar Baja
+        </button>
+    </div>
+    </form>
+
+</div>
+</div>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+/* ── Datos para JS ── */
+const GUIAS_POR_ENTIDAD = {};
+{% for g in guias %}{% if g.id_entidad %}
+if (!GUIAS_POR_ENTIDAD[{{ g.id_entidad }}]) GUIAS_POR_ENTIDAD[{{ g.id_entidad }}] = [];
+GUIAS_POR_ENTIDAD[{{ g.id_entidad }}].push({id: {{ g.id }}, nombre: {{ g.nombre | tojson }}});
+{% endif %}{% endfor %}
+
+const CANINOS = {
+    {% for c in caninos %}
+    {{ c.id }}: {
+        nombre:             {{ (c.nombre or '') | tojson }},
+        raza:               {{ (c.raza or '') | tojson }},
+        genero:             {{ (c.genero or '') | tojson }},
+        especialidad:       {{ (c.especialidad or '') | tojson }},
+        estado:             {{ (c.estado or 'activo') | tojson }},
+        id_entidad:         {{ c.id_entidad or 'null' }},
+        id_guia:            {{ c.id_guia or 'null' }},
+        fecha_nacimiento:   {{ (c.fecha_nacimiento | string if c.fecha_nacimiento else '') | tojson }},
+        chip_numero:        {{ (c.chip_numero or '') | tojson }},
+        num_registro:       {{ (c.num_registro or '') | tojson }},
+        color_pelaje:       {{ (c.color_pelaje or '') | tojson }},
+        peso_kg:            {{ (c.peso_kg | string if c.peso_kg else '') | tojson }},
+        talla_cm:           {{ (c.talla_cm | string if c.talla_cm else '') | tojson }},
+        foto_path:          {{ (c.foto_path or '') | tojson }},
+        fecha_ingreso:      {{ (c.fecha_ingreso | string if c.fecha_ingreso else '') | tojson }},
+        procedencia:        {{ (c.procedencia or '') | tojson }},
+        nombre_vacuna:      {{ (c.nombre_vacuna or '') | tojson }},
+        ultima_vacunacion:  {{ (c.ultima_vacunacion | string if c.ultima_vacunacion else '') | tojson }},
+        proxima_vacunacion: {{ (c.proxima_vacunacion | string if c.proxima_vacunacion else '') | tojson }},
+        observaciones:      {{ (c.observaciones or '') | tojson }},
+    },
+    {% endfor %}
+};
+
+/* ── Toggle de vista ── */
+function setVistaCaninos(vista) {
+    const tabla  = document.getElementById('caninosTabla');
+    const cards  = document.getElementById('caninosCards');
+    const btnTbl = document.getElementById('btnVistaTbl');
+    const btnCrd = document.getElementById('btnVistaCards');
+    if (!tabla || !cards) return;
+    if (vista === 'cards') {
+        tabla.style.display  = 'none';
+        cards.style.display  = 'block';
+        btnTbl.classList.remove('active');
+        btnCrd.classList.add('active');
+    } else {
+        tabla.style.display  = 'block';
+        cards.style.display  = 'none';
+        btnTbl.classList.add('active');
+        btnCrd.classList.remove('active');
+    }
+    localStorage.setItem('can_vista', vista);
+}
+
+/* ── Abrir / cerrar modal ── */
+function abrirModalNuevo() {
+    document.getElementById('formCanino').reset();
+    document.getElementById('formCanino').action = '/caninos/nuevo';
+    document.getElementById('modalTitulo').innerHTML = 'Nuevo <span style="color:var(--primary)">Canino K9</span>';
+    document.getElementById('btnGuardarTxt').textContent = 'Registrar Canino';
+    resetFotoPreview();
+    cargarGuias();
+    document.getElementById('modalCanino').classList.add('open');
+}
+
+function abrirModalEditar(id) {
+    const d = CANINOS[id];
+    if (!d) return;
+
+    document.getElementById('formCanino').action = `/caninos/${id}/editar`;
+    document.getElementById('modalTitulo').innerHTML = 'Editar <span style="color:var(--primary)">Canino K9</span>';
+    document.getElementById('btnGuardarTxt').textContent = 'Guardar Cambios';
+
+    document.getElementById('fNombre').value      = d.nombre;
+    document.getElementById('fRaza').value        = d.raza;
+    document.getElementById('fGenero').value      = d.genero;
+    document.getElementById('fEsp').value         = d.especialidad;
+    document.getElementById('fEstado').value      = d.estado;
+    document.getElementById('fFechaNac').value    = d.fecha_nacimiento;
+    document.getElementById('fChip').value        = d.chip_numero;
+    document.getElementById('fNumReg').value      = d.num_registro;
+    document.getElementById('fColor').value       = d.color_pelaje;
+    document.getElementById('fPeso').value        = d.peso_kg;
+    document.getElementById('fTalla').value       = d.talla_cm;
+    document.getElementById('fIngreso').value     = d.fecha_ingreso;
+    document.getElementById('fProcedencia').value = d.procedencia;
+    document.getElementById('fObs').value = d.observaciones;
+
+    const fEnt = document.getElementById('fEntidad');
+    if (fEnt) {
+        fEnt.value = d.id_entidad || '';
+        cargarGuias(d.id_guia);
+    } else {
+        if (d.id_guia) document.getElementById('fGuia').value = d.id_guia;
+    }
+
+    if (d.foto_path) {
+        const wrap = document.getElementById('fotoPreviewWrap');
+        wrap.innerHTML = `<img src="/static/${d.foto_path}" class="foto-preview">`;
+    } else {
+        resetFotoPreview();
+    }
+
+    document.getElementById('modalCanino').classList.add('open');
+}
+
+function cerrarModal() {
+    document.getElementById('modalCanino').classList.remove('open');
+}
+
+document.getElementById('modalCanino').addEventListener('click', e => {
+    if (e.target === document.getElementById('modalCanino')) cerrarModal();
+});
+
+/* ── Cascade entidad → guías ── */
+function cargarGuias(selGuia = null) {
+    const fEnt = document.getElementById('fEntidad');
+    if (!fEnt) return;
+    const idEnt = fEnt.value;
+    const sel   = document.getElementById('fGuia');
+    sel.innerHTML = '<option value="">— Sin guía asignado —</option>';
+
+    if (idEnt && GUIAS_POR_ENTIDAD[idEnt]) {
+        GUIAS_POR_ENTIDAD[idEnt].forEach(g => {
+            const opt = document.createElement('option');
+            opt.value = g.id;
+            opt.textContent = g.nombre;
+            if (selGuia && g.id == selGuia) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+}
+
+/* ── Preview foto ── */
+function previsualizarFoto(input) {
+    if (!input.files || !input.files[0]) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const wrap = document.getElementById('fotoPreviewWrap');
+        wrap.innerHTML = `<img src="${e.target.result}" class="foto-preview">`;
+    };
+    reader.readAsDataURL(input.files[0]);
+}
+
+function resetFotoPreview() {
+    document.getElementById('fotoPreviewWrap').innerHTML = '<i class="bi bi-shield-dog-fill" style="font-size:24px; color:var(--text-muted);"></i>';
+}
+
+/* ── Modal dar de baja ── */
+function abrirModalBaja(id, nombre) {
+    document.getElementById('modalBajaNombre').textContent = nombre;
+    document.getElementById('formBaja').action = `/caninos/${id}/eliminar`;
+    document.getElementById('bMotivo').value = '';
+    document.getElementById('bFecha').value = '';
+    document.getElementById('bJustificacion').value = '';
+    document.getElementById('bCarta').value = '';
+    document.getElementById('bCartaLabel').textContent = 'Sin archivos seleccionados';
+    document.getElementById('bCartaLabel').style.color = '';
+    document.getElementById('modalBaja').classList.add('open');
+}
+
+function cerrarModalBaja() {
+    document.getElementById('modalBaja').classList.remove('open');
+}
+
+document.getElementById('modalBaja').addEventListener('click', e => {
+    if (e.target === document.getElementById('modalBaja')) cerrarModalBaja();
+});
+
+function actualizarLabelBaja(input) {
+    const label = document.getElementById('bCartaLabel');
+    if (input.files && input.files[0]) {
+        label.textContent = input.files[0].name;
+        label.style.color = '#ef4444';
+        label.style.fontWeight = '600';
+    } else {
+        label.textContent = 'Sin archivos seleccionados';
+        label.style.color = '';
+        label.style.fontWeight = '';
+    }
+}
+
+/* ── Filtros en tiempo real ── */
+const TOTAL_CANINOS = {{ caninos | length }};
+
+function filtrarCaninos() {
+    const txt    = document.getElementById('filtroTexto').value.toLowerCase().trim();
+    const entVal = (document.getElementById('filtroEntidad') || {value:''}).value;
+    const estVal = document.getElementById('filtroEstado').value;
+    const espVal = document.getElementById('filtroEsp').value;
+
+    let visible = 0;
+
+    /* Filtrar filas de tabla */
+    document.querySelectorAll('#caninosTbody .canino-row').forEach(c => {
+        const esBaja = c.dataset.estado === 'baja';
+        const okTxt  = !txt    || c.dataset.nombre.includes(txt) || c.dataset.chip.includes(txt);
+        const okEnt  = !entVal || c.dataset.entidad === entVal;
+        const okEst  = estVal === '' ? !esBaja : (c.dataset.estado === estVal);
+        const okEsp  = !espVal || c.dataset.esp === espVal;
+        const show   = okTxt && okEnt && okEst && okEsp;
+        c.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+
+    /* Filtrar tarjetas */
+    document.querySelectorAll('#canCardsGrid .can-card').forEach(c => {
+        const esBaja = c.dataset.estado === 'baja';
+        const okTxt  = !txt    || c.dataset.nombre.includes(txt) || c.dataset.chip.includes(txt);
+        const okEnt  = !entVal || c.dataset.entidad === entVal;
+        const okEst  = estVal === '' ? !esBaja : (c.dataset.estado === estVal);
+        const okEsp  = !espVal || c.dataset.esp === espVal;
+        c.style.display = (okTxt && okEnt && okEst && okEsp) ? '' : 'none';
+    });
+
+    const el = document.getElementById('filtroResultados');
+    el.textContent = (txt || entVal || estVal || espVal)
+        ? `Mostrando ${visible} de ${TOTAL_CANINOS} caninos`
+        : `Mostrando ${visible} caninos activos`;
+}
+
+function limpiarFiltros() {
+    document.getElementById('filtroTexto').value = '';
+    ['filtroEntidad','filtroEstado','filtroEsp'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    filtrarCaninos();
+}
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+    const vista = localStorage.getItem('can_vista') || 'tabla';
+    setVistaCaninos(vista);
+    filtrarCaninos();
+    {% if flash_edit_id %}
+    abrirModalEditar({{ flash_edit_id }});
+    {% elif form_error %}
+    abrirModalNuevo();
+    {% endif %}
+});
+</script>
+{% endblock %}

@@ -1,0 +1,726 @@
+{% extends "layout.html" %}
+{% block contenido %}
+<style>
+    /* ── Encabezado ─────────────────────────────────────── */
+    .page-header {
+        display: flex; align-items: center;
+        justify-content: space-between; margin-bottom: 24px;
+    }
+    .page-header h1 { font-size: 20px; font-weight: 800; letter-spacing: 3px; color: var(--text-main); }
+    .page-header h1 span { color: var(--primary); }
+
+    /* ── Botón nuevo ─────────────────────────────────────── */
+    .btn-primary-act {
+        padding: 10px 22px; background: var(--primary); color: #111;
+        border: none; border-radius: 6px; font-weight: 700; font-size: 12px;
+        letter-spacing: 1px; cursor: pointer; transition: background .2s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary-act:hover { background: var(--primary-hover); }
+
+    /* ── Tabla ───────────────────────────────────────────── */
+    .tabla-card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; overflow: hidden;
+        box-shadow: var(--card-shadow);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--surface-2); }
+    th {
+        padding: 12px 14px; text-align: left; font-size: 10px;
+        font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-muted); border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+    }
+    td { padding: 13px 14px; font-size: 13px; color: var(--text-main); border-bottom: 1px solid var(--surface-3); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface-2); }
+
+    /* ── Logo en tabla ───────────────────────────────────── */
+    .logo-thumb {
+        width: 40px; height: 40px; border-radius: 8px;
+        object-fit: contain; border: 1px solid var(--border);
+        background: var(--surface-2); padding: 3px;
+    }
+    .logo-placeholder {
+        width: 40px; height: 40px; border-radius: 8px;
+        background: var(--surface-2); border: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--text-muted); font-size: 18px;
+    }
+
+    /* ── Botones de acción ───────────────────────────────── */
+    .btn-accion {
+        width: 32px; height: 32px; border-radius: 6px; font-size: 14px;
+        cursor: pointer; border: 1px solid; transition: .15s;
+        display: inline-flex; align-items: center; justify-content: center; padding: 0;
+    }
+    .btn-edit  { background: transparent; border-color: #22c55e; color: #22c55e; }
+    .btn-edit:hover  { background: #22c55e; color: #fff; }
+    .btn-del   { background: transparent; border-color: #ef4444; color: #ef4444; }
+    .btn-del:hover   { background: #ef4444; color: #fff; }
+
+    /* ── Toggle vista ────────────────────────────────────── */
+    .vista-toggle { display: flex; gap: 4px; }
+    .btn-vista {
+        width: 34px; height: 34px; border-radius: 7px; font-size: 15px;
+        border: 1.5px solid var(--border); background: var(--surface-1);
+        color: var(--text-muted); cursor: pointer; transition: .15s;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .btn-vista:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-vista.active { background: var(--primary); border-color: var(--primary); color: #111; }
+
+    /* ── Vista tarjetas ─────────────────────────────────── */
+    .cards-container { display: none; }
+    .ent-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .ent-card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 14px; padding: 22px 18px 16px; display: flex; flex-direction: column;
+        align-items: center; gap: 10px; box-shadow: var(--card-shadow); transition: box-shadow .2s;
+        text-align: center;
+    }
+    .ent-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    .ent-card-logo {
+        width: 64px; height: 64px; border-radius: 14px; object-fit: contain;
+        border: 1px solid var(--border); background: var(--surface-2); padding: 5px;
+    }
+    .ent-card-logo-ph {
+        width: 64px; height: 64px; border-radius: 14px; background: var(--surface-2);
+        border: 1px solid var(--border); display: flex; align-items: center;
+        justify-content: center; color: var(--text-muted); font-size: 26px;
+    }
+    .ent-card-name { font-size: 13px; font-weight: 800; color: var(--text-main); line-height: 1.3; }
+    .ent-card-meta {
+        font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column;
+        gap: 3px; width: 100%; align-items: flex-start; padding: 6px 0;
+        border-top: 1px solid var(--surface-3); border-bottom: 1px solid var(--surface-3);
+    }
+    .ent-card-meta span { display: flex; align-items: center; gap: 5px; }
+    .ent-card-meta i { font-size: 11px; color: var(--primary); }
+    .ent-card-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+    /* ── Estado vacío ────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-state i { font-size: 48px; margin-bottom: 12px; display: block; }
+
+    /* ═══════════════════════════════════════════════════════
+       MODAL
+    ═══════════════════════════════════════════════════════ */
+    .modal-overlay {
+        display: none; position: fixed; inset: 0; z-index: 1000;
+        background: rgba(0,0,0,0.55); backdrop-filter: blur(3px);
+        align-items: flex-start; justify-content: center;
+        padding: 40px 16px; overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+        background: var(--card-bg); border: 1px solid var(--card-border);
+        border-radius: 16px; box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+        width: 100%; max-width: 820px; padding: 44px 48px;
+        position: relative; animation: modalIn .2s ease;
+    }
+    @keyframes modalIn { from { opacity:0; transform:translateY(-16px); } to { opacity:1; transform:translateY(0); } }
+
+    .modal-close {
+        position: absolute; top: 16px; right: 18px;
+        background: none; border: none; font-size: 22px;
+        color: var(--text-muted); cursor: pointer; line-height: 1;
+        transition: color .15s;
+    }
+    .modal-close:hover { color: #ef4444; }
+
+    .modal-title {
+        font-size: 22px; font-weight: 700; letter-spacing: 0px;
+        color: var(--text-main); margin-bottom: 4px;
+    }
+    .modal-title span { color: var(--primary); }
+    .modal-sub {
+        font-size: 11px; letter-spacing: 1.5px; color: var(--text-muted);
+        text-transform: uppercase; margin-bottom: 24px;
+        padding-bottom: 20px; border-bottom: 1.5px solid var(--border);
+    }
+
+    /* ══ MODAL REDISEÑADO — estilo clean ════════════════════ */
+
+    /* Sección superior: logo izq + campos principales der */
+    .modal-top {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 28px;
+        align-items: start;
+        margin-bottom: 22px;
+    }
+
+    /* Área de logo — izquierda */
+    .logo-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+    .logo-img-wrap {
+        width: 130px;
+        height: 130px;
+        border-radius: 14px;
+        border: 1.5px solid var(--border);
+        background: var(--surface-1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+        transition: border-color .2s;
+    }
+    .logo-img-wrap:hover { border-color: var(--primary); }
+    .logo-img-wrap i { font-size: 38px; color: var(--text-muted); pointer-events: none; }
+    #logoPreview {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        object-fit: contain; padding: 8px; display: none;
+        background: var(--surface-1);
+    }
+    .btn-subir-logo {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 16px; border: 1.5px solid var(--border);
+        border-radius: 50px; font-size: 11px; font-weight: 600;
+        color: var(--text-muted); background: #fff; cursor: pointer;
+        transition: border-color .2s, color .2s;
+        letter-spacing: 0.3px;
+    }
+    .btn-subir-logo:hover { border-color: var(--primary); color: var(--primary); }
+    #logoNombreArchivo {
+        font-size: 10px; color: var(--text-muted);
+        text-align: center; word-break: break-all; max-width: 140px;
+        line-height: 1.4; min-height: 14px;
+    }
+    #inputLogo { display: none; }
+
+    /* Campos de la derecha (top) */
+    .fields-right { display: flex; flex-direction: column; gap: 14px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* Sección inferior: campos restantes en grilla */
+    .modal-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 6px; }
+    .col-full { grid-column: span 2; }
+
+    /* Labels y inputs */
+    label.lbl {
+        display: block; color: var(--text-muted); font-size: 10px;
+        font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
+        margin-bottom: 6px;
+    }
+    .finput {
+        width: 100%; padding: 10px 13px;
+        background: #fff; border: 1.5px solid #d1d9e6;
+        border-radius: 8px; color: var(--text-main);
+        font-size: 13.5px; outline: none;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .finput:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(184,134,11,0.1);
+    }
+
+    /* Prefijo teléfono */
+    .phone-row { display: flex; }
+    .phone-prefix {
+        padding: 0 12px; background: var(--surface-2);
+        border: 1.5px solid #d1d9e6; border-right: none;
+        border-radius: 8px 0 0 8px;
+        display: flex; align-items: center; font-size: 12px;
+        font-weight: 700; color: var(--text-main);
+        min-width: 56px; justify-content: center;
+    }
+    .phone-input { border-radius: 0 8px 8px 0 !important; flex: 1; }
+
+    /* Asterisco de campo obligatorio */
+    .req { color: #ef4444; font-weight: 700; margin-left: 2px; }
+    .req-note { font-size: 10.5px; color: var(--text-muted); margin-bottom: 16px; }
+    .req-note .req { font-size: 11px; }
+
+    /* ── Barra de filtros ──────────────────────── */
+    .filter-bar {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px 18px;
+        margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+    }
+    .filter-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .filter-label {
+        font-size: 10px; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: var(--text-muted);
+        white-space: nowrap; padding-right: 4px;
+    }
+    .filter-input-wrap { position: relative; flex: 1; min-width: 180px; }
+    .filter-input-wrap i {
+        position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+        color: var(--text-muted); font-size: 13px; pointer-events: none;
+    }
+    .filter-input {
+        width: 100%; padding: 8px 10px 8px 30px;
+        border: 1.5px solid var(--border); border-radius: 7px;
+        font-size: 12.5px; color: var(--text-main);
+        background: var(--surface-1); outline: none; transition: border-color .2s;
+    }
+    .filter-input:focus { border-color: var(--primary); }
+    .filter-select {
+        padding: 8px 12px; border: 1.5px solid var(--border);
+        border-radius: 7px; font-size: 12.5px; color: var(--text-main);
+        background: var(--surface-1); outline: none; cursor: pointer;
+        min-width: 130px; transition: border-color .2s;
+    }
+    .filter-select:focus { border-color: var(--primary); }
+    .filter-clear {
+        padding: 8px 14px; border: 1.5px solid var(--border);
+        border-radius: 7px; background: var(--surface-1);
+        color: var(--text-muted); font-size: 12px; cursor: pointer;
+        transition: all .15s; display: flex; align-items: center; gap: 5px;
+        white-space: nowrap;
+    }
+    .filter-clear:hover { border-color: #ef4444; color: #ef4444; }
+    .filter-count { font-size: 11px; color: var(--text-muted); margin-top: 8px; min-height: 14px; }
+
+    /* Divisor + botón centrado */
+    .modal-footer {
+        border-top: 1px solid var(--border);
+        margin-top: 24px;
+        padding-top: 22px;
+        text-align: center;
+    }
+    .btn-guardar {
+        display: inline-block;
+        padding: 13px 52px;
+        background: var(--primary); color: #111;
+        border: none; border-radius: 50px;
+        font-size: 13px; font-weight: 800;
+        letter-spacing: 1.5px; text-transform: uppercase;
+        cursor: pointer; transition: background .2s, transform .1s;
+    }
+    .btn-guardar:hover { background: var(--primary-hover); transform: translateY(-1px); }
+</style>
+
+<!-- ═══════════ ENCABEZADO ═══════════ -->
+<div class="page-header">
+    <h1>ENTIDADES <span>REGISTRADAS</span></h1>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <div class="vista-toggle">
+            <button id="btnVistaTbl" class="btn-vista active" onclick="setVistaEnt('tabla')" title="Vista tabla">
+                <i class="bi bi-table"></i>
+            </button>
+            <button id="btnVistaCards" class="btn-vista" onclick="setVistaEnt('cards')" title="Vista tarjetas">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+            </button>
+        </div>
+        <button class="btn-primary-act" onclick="abrirModalNuevo()">
+            <i class="bi bi-building-fill-add"></i> NUEVA ENTIDAD
+        </button>
+    </div>
+</div>
+
+<!-- ═══════════ FILTROS ═══════════ -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <span class="filter-label"><i class="bi bi-funnel-fill"></i> Filtrar:</span>
+        <div class="filter-input-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="filtroTexto" class="filter-input"
+                   placeholder="Razón social o NIT..." oninput="filtrarEntidades()">
+        </div>
+        <button class="filter-clear" onclick="limpiarFiltrosEntidades()">
+            <i class="bi bi-x-circle"></i> Limpiar
+        </button>
+    </div>
+    <p class="filter-count" id="filtroResultados"></p>
+</div>
+
+<!-- ═══════════ TABLA ═══════════ -->
+<div class="tabla-card">
+    {% if entidades %}
+    <table>
+        <thead>
+            <tr>
+                <th>Logo</th>
+                <th>Razón Social</th>
+                <th>NIT</th>
+                <th>País</th>
+                <th>Ciudad</th>
+                <th>Teléfono</th>
+                <th>Registro</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tablaEntBody">
+            {% for e in entidades %}
+            <tr data-razon="{{ e.razon_social | lower }}"
+                data-nit="{{ e.nit_cif | lower }}"
+                data-pais="{{ e.pais or '' }}">
+                <td>
+                    {% if e.logo_path %}
+                        <img src="/static/{{ e.logo_path }}" class="logo-thumb" alt="logo">
+                    {% else %}
+                        <div class="logo-placeholder"><i class="bi bi-building"></i></div>
+                    {% endif %}
+                </td>
+                <td><strong>{{ e.razon_social }}</strong></td>
+                <td>{{ e.nit_cif }}</td>
+                <td>🇨🇴 Colombia</td>
+                <td>{{ e.ciudad or '—' }}</td>
+                <td>{{ e.telefono or '—' }}</td>
+                <td>{{ e.fecha_registro.strftime('%d/%m/%Y') if e.fecha_registro else '—' }}</td>
+                <td style="white-space:nowrap;">
+                    <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ e.id }})" title="Editar">
+                        <i class="bi bi-pencil-fill"></i>
+                    </button>
+                    <button class="btn-accion btn-del" onclick="confirmarEliminar({{ e.id }})" title="Eliminar">
+                        <i class="bi bi-trash3-fill"></i>
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-buildings"></i>
+        <p>No hay entidades registradas aún.</p>
+        <button class="btn-primary-act" onclick="abrirModalNuevo()" style="margin-top:16px;">
+            + CREAR PRIMERA ENTIDAD
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ═══════════ TARJETAS ═══════════ -->
+<div class="cards-container" id="cardsContainer">
+    {% if entidades %}
+    <div class="ent-grid" id="entGrid">
+        {% for e in entidades %}
+        <div class="ent-card"
+             data-razon="{{ e.razon_social | lower }}"
+             data-nit="{{ e.nit_cif | lower }}">
+            {% if e.logo_path %}
+                <img src="/static/{{ e.logo_path }}" class="ent-card-logo" alt="logo">
+            {% else %}
+                <div class="ent-card-logo-ph"><i class="bi bi-building"></i></div>
+            {% endif %}
+            <div class="ent-card-name">{{ e.razon_social }}</div>
+            <div class="ent-card-meta">
+                <span><i class="bi bi-upc-scan"></i> {{ e.nit_cif }}</span>
+                <span><i class="bi bi-geo-alt-fill"></i> {{ e.ciudad or '—' }}</span>
+                <span><i class="bi bi-telephone-fill"></i> {{ e.telefono or '—' }}</span>
+                <span><i class="bi bi-calendar3"></i> {{ e.fecha_registro.strftime('%d/%m/%Y') if e.fecha_registro else '—' }}</span>
+            </div>
+            <div class="ent-card-actions">
+                <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ e.id }})" title="Editar">
+                    <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn-accion btn-del" onclick="confirmarEliminar({{ e.id }})" title="Eliminar">
+                    <i class="bi bi-trash3-fill"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-buildings"></i>
+        <p>No hay entidades registradas aún.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Form oculto para eliminar (evita GET con datos sensibles) -->
+<form id="formEliminar" method="POST" style="display:none;">
+    <input type="hidden" name="confirmar" value="1">
+</form>
+
+<!-- ═══════════ MODAL CREAR / EDITAR ═══════════ -->
+<div class="modal-overlay" id="modalOverlay" onclick="cerrarSiOverlay(event)">
+    <div class="modal-box" id="modalBox">
+        <button class="modal-close" onclick="cerrarModal()" title="Cerrar">&times;</button>
+
+        <div class="modal-title" id="modalTitulo">NUEVA <span>ENTIDAD</span></div>
+        <div class="modal-sub" id="modalSub">PROTOCOLO DE SINCRONIZACIÓN TERRITORIAL</div>
+
+        <form id="formEntidad" method="POST" enctype="multipart/form-data">
+            <p class="req-note"><span class="req">*</span> Campos obligatorios</p>
+
+            <!-- ── Sección superior: logo | campos principales ─── -->
+            <div class="modal-top">
+
+                <!-- Logo (izquierda) -->
+                <div class="logo-col">
+                    <label class="lbl" style="align-self:flex-start">Foto de Logo</label>
+                    <label class="logo-img-wrap" for="inputLogo">
+                        <img id="logoPreview" src="" alt="preview">
+                        <i class="bi bi-building" id="logoIcon"></i>
+                    </label>
+                    <label class="btn-subir-logo" for="inputLogo">
+                        <i class="bi bi-upload"></i> Subir Logo
+                    </label>
+                    <p id="logoNombreArchivo"></p>
+                    <input type="file" id="inputLogo" name="Logo"
+                           accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                           onchange="previsualizarLogo(this)">
+                </div>
+
+                <!-- Campos principales (derecha) — grid 2 columnas -->
+                <div class="fields-right" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <!-- Fila 1: Razón Social | Ciudad -->
+                    <div>
+                        <label class="lbl">Nombre / Razón Social <span class="req">*</span></label>
+                        <input type="text" name="RazonSocial" id="fRazon" class="finput"
+                               placeholder="Ej: Policía Nacional de Colombia" required>
+                    </div>
+                    <div>
+                        <label class="lbl">Ciudad / Municipio <span class="req">*</span></label>
+                        <input type="text" name="UbicacionEntidad" id="fCiudad" class="finput"
+                               list="listaCiudades" placeholder="Buscar ciudad..." required>
+                        <datalist id="listaCiudades"></datalist>
+                    </div>
+                    <!-- Fila 2: NIT | País -->
+                    <div>
+                        <label class="lbl">NIT <span class="req">*</span></label>
+                        <input type="text" name="NitCif" id="fNit" class="finput"
+                               placeholder="899999034-7" required>
+                        <input type="hidden" name="PaisEntidad" value="CO">
+                    </div>
+                    <div>
+                        <label class="lbl">País</label>
+                        <div class="finput" style="background:var(--surface-2);color:var(--text-muted);cursor:default;display:flex;align-items:center;gap:8px;height:42px;box-sizing:border-box;">
+                            <span style="display:inline-block;width:18px;height:13px;border-radius:2px;flex-shrink:0;background:linear-gradient(180deg,#fcd116 33%,#003893 33%,#003893 66%,#ce1126 66%);"></span>
+                            Colombia
+                        </div>
+                    </div>
+                    <!-- Fila 3: Dirección | Teléfono -->
+                    <div>
+                        <label class="lbl">Dirección</label>
+                        <input type="text" name="DireccionEntidad" id="fDireccion" class="finput"
+                               placeholder="Calle, número, barrio...">
+                    </div>
+                    <div>
+                        <label class="lbl">Teléfono</label>
+                        <div class="phone-row">
+                            <span class="phone-prefix" id="phonePrefijo">+57</span>
+                            <input type="tel" name="TelefonoEntidad" id="fTelefono"
+                                   class="finput phone-input" placeholder="3001234567"
+                                   pattern="[0-9]{10}" maxlength="10">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Footer con botón centrado ─────────────────────── -->
+            <div class="modal-footer">
+                <button type="submit" class="btn-guardar" id="btnGuardar">Guardar Entidad</button>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<!-- Datos de entidades en JS — evita problemas de comillas en atributos HTML -->
+<script>
+const ENTIDADES = {
+    {% for e in entidades %}
+    {{ e.id }}: {
+        razon:  {{ e.razon_social          | tojson }},
+        nit:    {{ e.nit_cif               | tojson }},
+        pais:   {{ (e.pais   or 'CO')      | tojson }},
+        ciudad: {{ (e.ciudad or '')         | tojson }},
+        dir:    {{ (e.direccion or '')      | tojson }},
+        tel:    {{ (e.telefono or '')       | tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+</script>
+
+<script>
+    const overlay = document.getElementById('modalOverlay');
+
+    /* ── Abrir modal vacío (crear) ───────────────────────── */
+    function abrirModalNuevo() {
+        document.getElementById('modalTitulo').innerHTML = 'Nueva <span style="color:var(--primary)">Entidad</span>';
+        document.getElementById('modalSub').textContent  = 'Registro de entidad de seguridad';
+        document.getElementById('formEntidad').action    = '/RegistroEntidad';
+        document.getElementById('btnGuardar').textContent = 'Guardar Entidad';
+        document.getElementById('formEntidad').reset();
+        document.getElementById('phonePrefijo').textContent = '+57';
+        resetLogoPreview();
+        overlay.classList.add('open');
+        cargarCiudades();
+    }
+
+    /* ── Abrir modal relleno (editar) — recibe solo el id ── */
+    function abrirModalEditar(id) {
+        const d = ENTIDADES[id];
+        if (!d) return;
+
+        document.getElementById('modalTitulo').innerHTML = 'Editar <span style="color:var(--primary)">Entidad</span>';
+        document.getElementById('modalSub').textContent  = 'Actualizar información de la entidad';
+        document.getElementById('formEntidad').action    = `/entidades/${id}/editar`;
+        document.getElementById('btnGuardar').textContent = 'Guardar Cambios';
+
+        document.getElementById('fRazon').value     = d.razon;
+        document.getElementById('fNit').value       = d.nit;
+        document.getElementById('fCiudad').value    = d.ciudad;
+        document.getElementById('fDireccion').value = d.dir;
+
+        document.getElementById('phonePrefijo').textContent = '+57';
+        const telInput = document.getElementById('fTelefono');
+        telInput.pattern     = '[0-9]{10}';
+        telInput.maxLength   = 10;
+        telInput.placeholder = '3001234567';
+        telInput.value       = String(d.tel).replace(/^\+\d{1,4}\s*/, '');
+
+        resetLogoPreview();
+        document.getElementById('logoNombreArchivo').textContent = 'Cambiar logo (opcional)';
+        overlay.classList.add('open');
+        cargarCiudades();
+    }
+
+    /* ── Cerrar modal ────────────────────────────────────── */
+    function cerrarModal() { overlay.classList.remove('open'); }
+    function cerrarSiOverlay(ev) { if (ev.target === overlay) cerrarModal(); }
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') cerrarModal(); });
+
+    /* ── Cargar ciudades de Colombia ────────────────────────── */
+    async function cargarCiudades() {
+        const dl = document.getElementById('listaCiudades');
+        if (!dl) return;
+        dl.innerHTML = '';
+        document.getElementById('fCiudad').placeholder = 'Buscando ciudades...';
+        try {
+            const r    = await fetch('https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.json');
+            const data = await r.json();
+            data.forEach(dep => dep.ciudades.forEach(c => {
+                const o = document.createElement('option');
+                o.value = `${c.toUpperCase()}, ${dep.departamento.toUpperCase()}`;
+                dl.appendChild(o);
+            }));
+            document.getElementById('fCiudad').placeholder = 'BUSCAR CIUDAD O MUNICIPIO...';
+        } catch {
+            document.getElementById('fCiudad').placeholder = 'Escribe la ciudad';
+        }
+    }
+
+    /* ── Vista previa del logo ───────────────────────────── */
+    function previsualizarLogo(input) {
+        if (!input.files || !input.files[0]) return;
+        const file    = input.files[0];
+        const preview = document.getElementById('logoPreview');
+        const icon    = document.getElementById('logoIcon');
+        document.getElementById('logoNombreArchivo').textContent =
+            file.name.length > 20 ? file.name.substring(0, 18) + '…' : file.name;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            preview.src           = ev.target.result;
+            preview.style.display = 'block';
+            icon.style.display    = 'none';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function resetLogoPreview() {
+        const preview = document.getElementById('logoPreview');
+        const icon    = document.getElementById('logoIcon');
+        preview.src           = '';
+        preview.style.display = 'none';
+        icon.style.display    = '';
+        document.getElementById('logoNombreArchivo').textContent = '';
+    }
+
+    /* ── Filtrar tabla y tarjetas de entidades ──────────── */
+    function filtrarEntidades() {
+        const texto = (document.getElementById('filtroTexto').value || '').toLowerCase().trim();
+
+        const rows = document.querySelectorAll('#tablaEntBody tr');
+        let visible = 0;
+        rows.forEach(row => {
+            const ok = (!texto || (row.dataset.razon||'').includes(texto) || (row.dataset.nit||'').includes(texto));
+            row.style.display = ok ? '' : 'none';
+            if (ok) visible++;
+        });
+
+        document.querySelectorAll('#entGrid .ent-card').forEach(card => {
+            const ok = (!texto || (card.dataset.razon||'').includes(texto) || (card.dataset.nit||'').includes(texto));
+            card.style.display = ok ? '' : 'none';
+        });
+
+        const el = document.getElementById('filtroResultados');
+        const total = rows.length;
+        if (el) el.textContent = visible < total
+            ? `Mostrando ${visible} de ${total} resultado${total !== 1 ? 's' : ''}`
+            : '';
+    }
+    function limpiarFiltrosEntidades() {
+        const el = document.getElementById('filtroTexto');
+        if (el) el.value = '';
+        filtrarEntidades();
+    }
+
+    /* ── Toggle vista tabla / tarjetas ─────────────────── */
+    function setVistaEnt(modo) {
+        const tbl   = document.querySelector('.tabla-card');
+        const cards = document.getElementById('cardsContainer');
+        const btnT  = document.getElementById('btnVistaTbl');
+        const btnC  = document.getElementById('btnVistaCards');
+        if (modo === 'cards') {
+            if (tbl)   tbl.style.display   = 'none';
+            if (cards) cards.style.display = 'block';
+            if (btnT)  btnT.classList.remove('active');
+            if (btnC)  btnC.classList.add('active');
+        } else {
+            if (tbl)   tbl.style.display   = 'block';
+            if (cards) cards.style.display = 'none';
+            if (btnT)  btnT.classList.add('active');
+            if (btnC)  btnC.classList.remove('active');
+        }
+        try { localStorage.setItem('ent_vista', modo); } catch {}
+    }
+
+    /* Restaurar vista guardada */
+    document.addEventListener('DOMContentLoaded', () => {
+        let v = 'tabla';
+        try { v = localStorage.getItem('ent_vista') || 'tabla'; } catch {}
+        setVistaEnt(v);
+    });
+
+    /* ── Confirmar eliminación con SweetAlert2 ───────────── */
+    function confirmarEliminar(id) {
+        const d = ENTIDADES[id];
+        if (!d) return;
+        Swal.fire({
+            title: '¿Eliminar entidad?',
+            html:  `Vas a eliminar <strong>${d.razon}</strong>.<br><span style="font-size:13px;color:#6b7280">Esta acción no se puede deshacer.</span>`,
+            icon:  'warning',
+            iconColor: '#ef4444',
+            showCancelButton:    true,
+            confirmButtonColor:  '#ef4444',
+            cancelButtonColor:   '#6b7280',
+            confirmButtonText:   '<i class="bi bi-trash3-fill"></i> Sí, eliminar',
+            cancelButtonText:    'Cancelar',
+            reverseButtons:      true,
+            customClass: { popup: 'swal-popup-custom' }
+        }).then(result => {
+            if (result.isConfirmed) {
+                const form = document.getElementById('formEliminar');
+                form.action = `/entidades/${id}/eliminar`;
+                form.submit();
+            }
+        });
+    }
+</script>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .swal-popup-custom { font-family: "Segoe UI", sans-serif; border-radius: 16px !important; }
+    .swal2-icon.swal2-warning { border-color: #ef4444 !important; }
+</style>
+{% endblock %}

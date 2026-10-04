@@ -1,0 +1,1078 @@
+{% extends "layout.html" %}
+{% block contenido %}
+<style>
+/* ── Cabecera de página ───────────────────────────────── */
+.page-header {
+    display: flex; align-items: center;
+    justify-content: space-between; margin-bottom: 28px;
+}
+.page-header h1 {
+    font-size: 20px; font-weight: 800;
+    letter-spacing: 3px; color: var(--text-main);
+}
+.page-header h1 span { color: var(--primary); }
+.btn-nuevo {
+    padding: 10px 22px; background: var(--primary);
+    color: #111; border: none; border-radius: 6px;
+    font-weight: 700; font-size: 12px; letter-spacing: 1px;
+    text-decoration: none; cursor: pointer;
+    transition: background .2s;
+}
+.btn-nuevo:hover { background: var(--primary-hover); }
+
+/* ── Tabla de usuarios ───────────────────────────────── */
+.tabla-card {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+table { width: 100%; border-collapse: collapse; }
+thead { background: var(--surface-2); }
+th {
+    padding: 13px 16px; text-align: left;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-muted); border-bottom: 1px solid var(--border);
+}
+td {
+    padding: 14px 16px; font-size: 13px;
+    color: var(--text-main); border-bottom: 1px solid var(--surface-3);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface-2); }
+
+.badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-super { background: #fef9c3; color: #854d0e; }
+.badge-admin { background: #dbeafe; color: #1d4ed8; }
+.badge-guia  { background: #d1fae5; color: #065f46; }
+.badge-user  { background: #f1f5f9; color: #475569; }
+
+/* ── Barra de filtros ────────────────────────────────── */
+.filter-bar {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px;
+    margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+}
+.filter-group {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+}
+.filter-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-muted);
+    white-space: nowrap; padding-right: 4px;
+}
+.filter-input-wrap { position: relative; flex: 1; min-width: 170px; }
+.filter-input-wrap i {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 13px; pointer-events: none;
+}
+.filter-input {
+    width: 100%; padding: 8px 10px 8px 30px;
+    border: 1.5px solid var(--border); border-radius: 7px;
+    font-size: 12.5px; color: var(--text-main);
+    background: var(--surface-1); outline: none;
+    transition: border-color .2s;
+}
+.filter-input:focus { border-color: var(--primary); }
+.filter-select {
+    padding: 8px 12px; border: 1.5px solid var(--border);
+    border-radius: 7px; font-size: 12.5px; color: var(--text-main);
+    background: var(--surface-1); outline: none; cursor: pointer;
+    min-width: 140px; transition: border-color .2s;
+}
+.filter-select:focus { border-color: var(--primary); }
+.filter-clear {
+    padding: 8px 14px; border: 1.5px solid var(--border);
+    border-radius: 7px; background: var(--surface-1);
+    color: var(--text-muted); font-size: 12px; cursor: pointer;
+    transition: all .15s; display: flex; align-items: center; gap: 5px;
+    white-space: nowrap;
+}
+.filter-clear:hover { border-color: #ef4444; color: #ef4444; }
+.filter-count { font-size: 11px; color: var(--text-muted); margin-top: 8px; min-height: 14px; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.empty-state i { font-size: 48px; margin-bottom: 12px; display: block; }
+
+.btn-accion {
+    width: 32px; height: 32px; border-radius: 6px; font-size: 14px;
+    cursor: pointer; border: 1px solid; transition: .15s;
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.btn-edit { background: transparent; border-color: #22c55e; color: #22c55e; }
+.btn-edit:hover { background: #22c55e; color: #fff; }
+.btn-del  { background: transparent; border-color: #ef4444; color: #ef4444; }
+.btn-del:hover  { background: #ef4444; color: #fff; }
+
+/* ── Toggle vista ─────────────────────────────────── */
+.vista-toggle { display:flex; gap:4px; }
+.btn-vista {
+    width:34px; height:34px; border-radius:7px; font-size:15px;
+    border:1.5px solid var(--border); background:var(--surface-1);
+    color:var(--text-muted); cursor:pointer; transition:.15s;
+    display:inline-flex; align-items:center; justify-content:center;
+}
+.btn-vista:hover { border-color:var(--primary); color:var(--primary); }
+.btn-vista.active { background:var(--primary); border-color:var(--primary); color:#111; }
+
+/* ── Vista tarjetas usuarios ──────────────────────── */
+.usr-cards-container { display:none; }
+.usr-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(230px,1fr));
+    gap:16px;
+}
+.usr-card {
+    background:var(--card-bg); border:1px solid var(--border);
+    border-radius:14px; padding:20px 18px 16px;
+    display:flex; flex-direction:column; align-items:center;
+    gap:10px; box-shadow:var(--card-shadow); text-align:center;
+    transition:box-shadow .2s; position:relative;
+}
+.usr-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.10); }
+.usr-avatar {
+    width:62px; height:62px; border-radius:50%;
+    object-fit:cover; border:2.5px solid var(--border);
+    background:var(--surface-2);
+}
+.usr-avatar-ph {
+    width:62px; height:62px; border-radius:50%;
+    background:var(--surface-2); border:2px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-size:26px; color:var(--text-muted);
+}
+.usr-card-name { font-size:13px; font-weight:800; color:var(--text-main); line-height:1.3; }
+.usr-card-user { font-size:11px; font-family:monospace; color:var(--text-muted); }
+.usr-card-meta {
+    width:100%; font-size:11px; color:var(--text-muted);
+    display:flex; flex-direction:column; gap:3px; align-items:flex-start;
+    border-top:1px solid var(--surface-3); padding-top:8px;
+}
+.usr-card-meta span { display:flex; align-items:center; gap:5px; }
+.usr-card-meta i { font-size:11px; color:var(--primary); }
+.usr-card-actions { display:flex; gap:8px; margin-top:4px; }
+
+/* ── Overlay del modal ───────────────────────────────── */
+.modal-overlay {
+    display: none; position: fixed;
+    inset: 0; background: rgba(0,0,0,0.55);
+    z-index: 1000; overflow-y: auto; padding: 32px 16px;
+}
+.modal-overlay.activo { display: block; }
+
+/* ── Contenedor del formulario (modal) ───────────────── */
+.ModalUsuario {
+    max-width: 860px; margin: 0 auto;
+    background: var(--card-bg); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    padding: 48px; position: relative;
+}
+.modal-close {
+    position: absolute; top: 18px; right: 20px;
+    background: none; border: none; font-size: 22px;
+    cursor: pointer; color: var(--text-muted); line-height: 1;
+    transition: color .15s;
+}
+.modal-close:hover { color: #ef4444; }
+
+/* ── Header del formulario ───────────────────────────── */
+.fh-wrap { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 10px; }
+.fh-bar { width: 4px; min-height: 44px; background: var(--primary); border-radius: 4px; }
+.fh-title { font-size: 22px; font-weight: 800; color: var(--text-main); }
+.fh-title span { color: var(--primary); }
+.fh-sub { font-size: 11px; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+.fh-divider { border: none; border-top: 1.5px solid var(--border); margin: 20px 0 28px; }
+.sec-divider { border: none; border-top: 1.5px solid var(--border); margin: 28px 0; }
+
+/* ── Sección foto + nombre + username ───────────────── */
+.top-section {
+    display: grid; grid-template-columns: 150px 1fr;
+    gap: 36px; align-items: start;
+}
+.foto-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.foto-circle {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: var(--surface-2); border: 2.5px dashed #d1d9e6;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; overflow: hidden; position: relative;
+    transition: border-color .2s, box-shadow .2s;
+}
+.foto-circle:hover { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(184,134,11,0.1); }
+.foto-circle i { font-size: 44px; color: #c5cfe0; pointer-events: none; }
+.foto-circle img {
+    width: 100%; height: 100%; object-fit: cover;
+    display: none; position: absolute; top: 0; left: 0;
+}
+.btn-foto-pill {
+    padding: 6px 18px; border: 1.5px solid var(--primary);
+    border-radius: 50px; background: transparent; color: var(--primary);
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    transition: background .2s, color .2s;
+    text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+}
+.btn-foto-pill:hover { background: var(--primary); color: #111; }
+.foto-hint { font-size: 10px; color: var(--text-muted); text-align: center; line-height: 1.4; }
+#inputFotoPerfil { display: none; }
+.info-col { display: flex; flex-direction: column; gap: 18px; }
+
+/* ── Grid 2 columnas ─────────────────────────────────── */
+.FGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.fw { grid-column: span 2; }
+
+/* ── Labels ──────────────────────────────────────────── */
+label.flbl {
+    display: block; color: var(--text-muted); font-size: 10px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 7px;
+}
+
+/* ── Inputs ──────────────────────────────────────────── */
+.FInput {
+    width: 100%; padding: 11px 14px;
+    background: #fff; border: 1.5px solid #d1d9e6;
+    border-radius: 8px; color: var(--text-main);
+    font-size: 13.5px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+}
+.FInput:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(184,134,11,0.1); }
+.FInput.invalid { border-color: #ef4444 !important; }
+.field-hint { font-size: 10.5px; color: var(--text-muted); margin-top: 5px; min-height: 14px; }
+.field-hint.err { color: #ef4444; }
+
+/* ── Password toggle ─────────────────────────────────── */
+.pass-wrap { position: relative; }
+.pass-wrap .FInput { padding-right: 44px; }
+.pass-eye {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 17px; padding: 0;
+    display: flex; align-items: center; transition: color .15s;
+}
+.pass-eye:hover { color: var(--primary); }
+
+/* ── Teléfono ────────────────────────────────────────── */
+.phone-wrap { display: flex; }
+.phone-code {
+    padding: 0 12px; background: var(--surface-2);
+    border: 1.5px solid #d1d9e6; border-right: none;
+    border-radius: 8px 0 0 8px;
+    display: flex; align-items: center; font-size: 12px;
+    font-weight: 700; color: var(--text-main);
+    min-width: 60px; justify-content: center; white-space: nowrap;
+}
+.phone-wrap .FInput { border-radius: 0 8px 8px 0; }
+
+/* ── Upload documento ────────────────────────────────── */
+.doc-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.btn-upload {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 18px; border: 1.5px dashed #d1d9e6;
+    border-radius: 8px; font-size: 12px; font-weight: 600;
+    color: var(--text-muted); background: var(--surface-1);
+    cursor: pointer; transition: border-color .2s, color .2s; white-space: nowrap;
+}
+.btn-upload:hover { border-color: var(--primary); color: var(--primary); }
+.doc-name { font-size: 11px; color: var(--text-muted); }
+#inputDocIdent { display: none; }
+
+/* ── Info note ───────────────────────────────────────── */
+.info-note {
+    background: var(--info-bg,#eff6ff); border: 1px solid var(--info-border,#bfdbfe);
+    border-radius: 8px; padding: 12px 16px;
+    font-size: 12px; color: var(--info-text,#1d4ed8);
+    display: flex; align-items: flex-start; gap: 8px;
+}
+
+/* ── Error dentro del modal ──────────────────────────── */
+.error-msg {
+    background: #fef2f2; border: 1px solid #fecaca; color: #dc2626;
+    padding: 12px 16px; border-radius: 8px; font-size: 13px;
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Asterisco de campo obligatorio ─────────────────── */
+.req { color: #ef4444; font-weight: 700; margin-left: 2px; }
+.req-note { font-size: 10.5px; color: var(--text-muted); margin-bottom: 20px; }
+.req-note .req { font-size: 11px; }
+
+/* ── Footer del form ─────────────────────────────────── */
+.form-footer { border-top: 1.5px solid var(--border); margin-top: 28px; padding-top: 24px; text-align: center; }
+.BtnGuardar {
+    display: inline-block; padding: 14px 60px;
+    background: var(--primary); color: #111;
+    border: none; border-radius: 50px;
+    font-size: 13px; font-weight: 800; letter-spacing: 1.5px;
+    text-transform: uppercase; cursor: pointer; transition: background .2s, transform .1s;
+}
+.BtnGuardar:hover { background: var(--primary-hover); transform: translateY(-1px); }
+</style>
+
+<!-- ── Cabecera ─────────────────────────────────────────────── -->
+<div class="page-header">
+    {% if session.rol == 'super_admin' %}
+        <h1>TODOS LOS <span>USUARIOS</span></h1>
+    {% else %}
+        <h1>USUARIOS DE <span>MI ENTIDAD</span></h1>
+    {% endif %}
+    <div style="display:flex;gap:10px;align-items:center;">
+        <div class="vista-toggle">
+            <button id="btnVistaTbl" class="btn-vista active" onclick="setVistaUsr('tabla')" title="Vista tabla">
+                <i class="bi bi-table"></i>
+            </button>
+            <button id="btnVistaCards" class="btn-vista" onclick="setVistaUsr('cards')" title="Vista tarjetas">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+            </button>
+        </div>
+        <button class="btn-nuevo" onclick="abrirModalNuevo()">+ NUEVO USUARIO</button>
+    </div>
+</div>
+
+<!-- ── Barra de filtros ──────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <span class="filter-label"><i class="bi bi-funnel-fill"></i> Filtrar:</span>
+        <div class="filter-input-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="filtroTexto" class="filter-input"
+                   placeholder="Nombre o documento..." oninput="filtrarUsuarios()">
+        </div>
+        <select id="filtroRol" class="filter-select" onchange="filtrarUsuarios()">
+            <option value="">Todos los roles</option>
+            <option value="super_admin">Super Admin</option>
+            <option value="admin_entidad">Admin Entidad</option>
+            <option value="guia_canino">Guía Canino</option>
+        </select>
+        {% if session.rol == 'super_admin' %}
+        <select id="filtroEntidad" class="filter-select" onchange="filtrarUsuarios()">
+            <option value="">Todas las entidades</option>
+            {% for e in entidades %}
+            <option value="{{ e.id }}">{{ e.razon_social }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <button class="filter-clear" onclick="limpiarFiltrosUsuarios()">
+            <i class="bi bi-x-circle"></i> Limpiar
+        </button>
+    </div>
+    <p class="filter-count" id="filtroResultados"></p>
+</div>
+
+<!-- ── Tabla de usuarios ──────────────────────────────────────── -->
+<div class="tabla-card">
+    {% if usuarios %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Usuario</th>
+                <th>Documento</th>
+                <th>Email</th>
+                <th>Teléfono</th>
+                <th>Rol</th>
+                {% if session.rol == 'super_admin' %}<th>Entidad</th>{% endif %}
+                <th>Registro</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tablaBody">
+            {% for u in usuarios %}
+            <tr data-nombre="{{ u.nombre | lower }}"
+                data-doc="{{ u.documento }}"
+                data-rol="{{ u.rol }}"
+                data-entidad="{{ u.id_entidad or '' }}">
+                <td><strong>{{ u.nombre }}</strong></td>
+                <td><span style="font-family:monospace;font-size:12px">{{ u.nombre_usuario or '—' }}</span></td>
+                <td>{{ u.documento }}</td>
+                <td>{{ u.email }}</td>
+                <td>{{ u.telefono or '—' }}</td>
+                <td>
+                    {% if u.rol == 'super_admin' %}
+                        <span class="badge badge-super">Super Admin</span>
+                    {% elif u.rol == 'admin_entidad' %}
+                        <span class="badge badge-admin">Admin Entidad</span>
+                    {% elif u.rol == 'guia_canino' %}
+                        <span class="badge badge-guia">Guía Canino</span>
+                    {% else %}
+                        <span class="badge badge-user">Usuario</span>
+                    {% endif %}
+                </td>
+                {% if session.rol == 'super_admin' %}
+                <td>{{ u.nombre_entidad or '— Global —' }}</td>
+                {% endif %}
+                <td>{{ u.fecha_registro.strftime('%d/%m/%Y') if u.fecha_registro else '—' }}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ u.id }})" title="Editar">
+                        <i class="bi bi-pencil-fill"></i>
+                    </button>
+                    <button class="btn-accion btn-del" onclick="confirmarEliminarUsuario({{ u.id }})" title="Eliminar">
+                        <i class="bi bi-trash3-fill"></i>
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-people"></i>
+        <p>No hay usuarios registrados aún.</p>
+        <button class="btn-nuevo" onclick="abrirModalNuevo()"
+                style="display:inline-block;margin-top:16px;">+ CREAR PRIMER USUARIO</button>
+    </div>
+    {% endif %}
+</div>
+
+
+<!-- ══ VISTA TARJETAS ══════════════════════════════════════ -->
+<div class="usr-cards-container" id="usrCardsContainer">
+    {% if usuarios %}
+    <div class="usr-grid" id="usrGrid">
+        {% for u in usuarios %}
+        {% set ROL_MAP = {'super_admin':'Super Admin','admin_entidad':'Admin Entidad','guia_canino':'Guía Canino'} %}
+        {% set ROL_CLS = {'super_admin':'badge-super','admin_entidad':'badge-admin','guia_canino':'badge-guia'} %}
+        <div class="usr-card"
+             data-nombre="{{ u.nombre | lower }}"
+             data-doc="{{ u.documento }}"
+             data-rol="{{ u.rol }}"
+             data-entidad="{{ u.id_entidad or '' }}">
+            {% if u.foto_perfil_path %}
+                <img src="/static/{{ u.foto_perfil_path }}" class="usr-avatar" alt="foto">
+            {% else %}
+                <div class="usr-avatar-ph"><i class="bi bi-person-fill"></i></div>
+            {% endif %}
+            <div class="usr-card-name">{{ u.nombre }}</div>
+            <div class="usr-card-user">@{{ u.nombre_usuario or '—' }}</div>
+            <span class="badge {{ ROL_CLS.get(u.rol, 'badge-user') }}">{{ ROL_MAP.get(u.rol, u.rol) }}</span>
+            <div class="usr-card-meta">
+                <span><i class="bi bi-envelope-fill"></i> {{ u.email }}</span>
+                {% if u.telefono %}<span><i class="bi bi-telephone-fill"></i> {{ u.telefono }}</span>{% endif %}
+                {% if session.rol == 'super_admin' %}<span><i class="bi bi-buildings-fill"></i> {{ u.nombre_entidad or '— Global —' }}</span>{% endif %}
+                <span><i class="bi bi-calendar3"></i> {{ u.fecha_registro.strftime('%d/%m/%Y') if u.fecha_registro else '—' }}</span>
+            </div>
+            <div class="usr-card-actions">
+                <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ u.id }})" title="Editar">
+                    <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn-accion btn-del" onclick="confirmarEliminarUsuario({{ u.id }})" title="Eliminar">
+                    <i class="bi bi-trash3-fill"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — NUEVO USUARIO
+════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalUsuario">
+<div class="ModalUsuario">
+
+    <button class="modal-close" onclick="cerrarModalUsuario()" title="Cerrar">&times;</button>
+
+    <!-- Header -->
+    <div class="fh-wrap">
+        <div class="fh-bar"></div>
+        <div>
+            <div class="fh-title" id="modalFormTitle">Nuevo <span>Usuario</span></div>
+            <div class="fh-sub">
+                {% if session.rol == 'super_admin' %}Crear administrador de entidad{% else %}Agregar usuario a tu entidad{% endif %}
+            </div>
+        </div>
+    </div>
+    <hr class="fh-divider">
+
+    <form action="/usuarios/nuevo" method="POST" enctype="multipart/form-data" id="formUsuario" novalidate>
+
+        {% if form_error %}
+        <div class="error-msg"><i class="bi bi-exclamation-triangle-fill"></i> {{ form_error }}</div>
+        {% endif %}
+
+        <p class="req-note"><span class="req">*</span> Campos obligatorios</p>
+
+        <!-- Sección superior: Foto + Nombre + Usuario -->
+        <div class="top-section">
+            <div class="foto-col">
+                <div class="foto-circle"
+                     onclick="document.getElementById('inputFotoPerfil').click()"
+                     title="Subir foto de perfil">
+                    <i class="bi bi-person-fill" id="fotoIcon"></i>
+                    <img id="fotoPreview" alt="Foto de perfil">
+                </div>
+                <button type="button" class="btn-foto-pill"
+                        onclick="document.getElementById('inputFotoPerfil').click()">
+                    <i class="bi bi-camera"></i> Subir Foto
+                </button>
+                <span class="foto-hint">PNG, JPG o WebP<br>Máx. 5 MB</span>
+                <input type="file" id="inputFotoPerfil" name="foto_perfil"
+                       accept="image/png,image/jpeg,image/webp,image/gif"
+                       onchange="previsualizarFoto(this)">
+            </div>
+
+            <div class="info-col">
+                <div>
+                    <label class="flbl">Nombre Completo <span class="req">*</span></label>
+                    <input type="text" name="nombre" id="inpNombre" class="FInput"
+                           placeholder="Ej: Juan Pérez García" required
+                           oninput="sugerirUsername()">
+                </div>
+                <div>
+                    <label class="flbl">
+                        Nombre de Usuario <span class="req">*</span>
+                        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)"> — para iniciar sesión</span>
+                    </label>
+                    <input type="text" name="nombre_usuario" id="inpUsername" class="FInput"
+                           placeholder="Ej: juan.perez" required
+                           pattern="[a-zA-Z0-9._-]{3,30}" maxlength="30"
+                           autocomplete="off">
+                    <div class="field-hint" id="hintUsername">3–30 caracteres: letras, números, puntos o guiones</div>
+                </div>
+            </div>
+        </div>
+
+        <hr class="sec-divider">
+
+        <div class="FGrid">
+            <!-- Nacionalidad (estático) | Tipo de Documento -->
+            <div>
+                <label class="flbl">Nacionalidad</label>
+                <div class="FInput" style="background:var(--surface-2);color:var(--text-muted);cursor:default;display:flex;align-items:center;gap:9px;box-sizing:border-box;">
+                    <span style="display:inline-block;width:20px;height:14px;border-radius:2px;flex-shrink:0;background:linear-gradient(180deg,#fcd116 33%,#003893 33%,#003893 66%,#ce1126 66%);"></span>
+                    Colombia
+                </div>
+                <input type="hidden" name="nacionalidad" value="CO">
+            </div>
+            <div>
+                <label class="flbl">Tipo de Documento</label>
+                <select id="selTipoDoc" name="tipo_documento" class="FInput" onchange="adaptarDocumento()">
+                    <option value="CC"  data-pat="[0-9]{8,10}"      data-hint="8 a 10 dígitos">Cédula de Ciudadanía</option>
+                    <option value="CE"  data-pat="[A-Z0-9]{4,12}"   data-hint="4 a 12 caracteres">Cédula de Extranjería</option>
+                    <option value="TI"  data-pat="[0-9]{10,11}"     data-hint="10 u 11 dígitos">Tarjeta de Identidad</option>
+                    <option value="PAS" data-pat="[A-Z0-9]{6,12}"   data-hint="6 a 12 caracteres">Pasaporte</option>
+                </select>
+            </div>
+
+            <!-- Número documento | Teléfono -->
+            <div>
+                <label class="flbl">Número de Documento <span class="req">*</span></label>
+                <input type="text" id="inpDocumento" name="documento" class="FInput" required>
+                <div class="field-hint" id="hintDoc"></div>
+            </div>
+            <div>
+                <label class="flbl">Teléfono</label>
+                <div class="phone-wrap">
+                    <span class="phone-code" id="telCodigo">+57</span>
+                    <input type="tel" id="inpTelefono" name="telefono" class="FInput"
+                           placeholder="3001234567" pattern="[0-9]{10}" maxlength="10">
+                </div>
+                <div class="field-hint" id="hintTel"></div>
+            </div>
+
+            <!-- Email | Contraseña -->
+            <div>
+                <label class="flbl">Correo Electrónico <span class="req">*</span></label>
+                <input type="email" name="email" class="FInput" placeholder="correo@ejemplo.com" required>
+            </div>
+
+            <!-- Contraseña (col 2 de la misma fila) -->
+            <div>
+                <label class="flbl">Contraseña <span class="req">*</span></label>
+                <div class="pass-wrap">
+                    <input type="password" id="inpPass" name="password" class="FInput"
+                           placeholder="••••••••" required minlength="6">
+                    <button type="button" class="pass-eye" onclick="togglePass('inpPass','eyePass1')">
+                        <i id="eyePass1" class="bi bi-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <div>
+                <label class="flbl">Confirmar Contraseña <span class="req">*</span></label>
+                <div class="pass-wrap">
+                    <input type="password" id="inpPass2" name="password2" class="FInput"
+                           placeholder="••••••••" required>
+                    <button type="button" class="pass-eye" onclick="togglePass('inpPass2','eyePass2')">
+                        <i id="eyePass2" class="bi bi-eye"></i>
+                    </button>
+                </div>
+                <div class="field-hint err" id="hintPass"></div>
+                <div class="field-hint" id="passHintEdit" style="display:none;color:#3b82f6">
+                    <i class="bi bi-info-circle"></i> Dejar en blanco para no cambiar la contraseña
+                </div>
+            </div>
+
+            <!-- Confirmar contraseña ocupa col 1, Doc identidad col 2 en siguiente fila -->
+            <!-- Documento de identidad -->
+            <div>
+                <label class="flbl">
+                    Doc. Identidad
+                    <span style="font-weight:400;text-transform:none;letter-spacing:0"> — PDF o imagen</span>
+                </label>
+                <div class="doc-row">
+                    <label class="btn-upload" for="inputDocIdent">
+                        <i class="bi bi-file-earmark-arrow-up"></i> Seleccionar archivo
+                    </label>
+                    <span class="doc-name" id="docNombre">Ningún archivo seleccionado</span>
+                </div>
+                <input type="file" id="inputDocIdent" name="doc_identidad"
+                       accept="application/pdf,image/png,image/jpeg,image/webp"
+                       onchange="mostrarNombreDoc(this)">
+            </div>
+
+            {% if session.rol == 'super_admin' %}
+            <div id="grupoEntidad">
+                <label class="flbl">Entidad Asignada <span class="req">*</span></label>
+                <select name="id_entidad" id="selEntidad" class="FInput">
+                    <option value="">— Seleccionar entidad —</option>
+                    {% for e in entidades %}
+                    <option value="{{ e.id }}">{{ e.razon_social }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="flbl">Rol <span class="req">*</span></label>
+                <select name="rol" id="selectRol" class="FInput" onchange="toggleEntidad()">
+                    <option value="admin_entidad">Admin Entidad</option>
+                    <option value="guia_canino">Guía Canino</option>
+                    <option value="super_admin">Super Admin</option>
+                </select>
+            </div>
+            {% else %}
+            <div class="fw">
+                <div class="info-note">
+                    <i class="bi bi-info-circle-fill"></i>
+                    Este usuario quedará asignado a <strong>tu entidad</strong> automáticamente.
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-footer">
+            <button type="submit" class="BtnGuardar" id="btnGuardarUsuario">Crear Usuario</button>
+        </div>
+    </form>
+
+</div><!-- /.ModalUsuario -->
+</div><!-- /.modal-overlay -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════════════ -->
+<!-- Datos de usuarios para JS (sin datos sensibles) -->
+<script>
+const USUARIOS = {
+    {% for u in usuarios %}
+    {{ u.id }}: {
+        nombre:         {{ u.nombre | tojson }},
+        nombre_usuario: {{ (u.nombre_usuario or '') | tojson }},
+        email:          {{ u.email | tojson }},
+        telefono:       {{ (u.telefono or '') | tojson }},
+        rol:            {{ u.rol | tojson }},
+        id_entidad:     {{ (u.id_entidad or 0) | tojson }},
+        foto:           {{ (u.foto_perfil_path or '') | tojson }},
+        documento:      {{ (u.documento or '') | tojson }},
+        tipo_documento: {{ (u.tipo_documento or 'CC') | tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+</script>
+<form id="formEliminarUsuario" method="POST" style="display:none">
+    <input type="hidden" name="confirmar" value="1">
+</form>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+/* ── Abrir / cerrar modal (función base) ──────────────── */
+function abrirModalUsuario() {
+    document.getElementById('modalUsuario').classList.add('activo');
+    document.body.style.overflow = 'hidden';
+}
+function cerrarModalUsuario() {
+    document.getElementById('modalUsuario').classList.remove('activo');
+    document.body.style.overflow = '';
+}
+document.getElementById('modalUsuario').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalUsuario();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModalUsuario(); });
+
+/* ── Restablecer preview de foto ──────────────────────── */
+function resetFotoPreview() {
+    const img = document.getElementById('fotoPreview');
+    img.src = ''; img.style.display = 'none';
+    document.getElementById('fotoIcon').style.display = '';
+    document.getElementById('inputFotoPerfil').value = '';
+}
+
+/* ── Abrir modal para CREAR nuevo usuario ─────────────── */
+function abrirModalNuevo() {
+    document.getElementById('formUsuario').reset();
+    document.getElementById('formUsuario').action = '/usuarios/nuevo';
+    document.getElementById('modalFormTitle').innerHTML =
+        'Nuevo <span style="color:var(--primary)">Usuario</span>';
+    document.getElementById('btnGuardarUsuario').textContent = 'Crear Usuario';
+    // Contraseña obligatoria en creación
+    document.getElementById('inpPass').required  = true;
+    document.getElementById('inpPass2').required = true;
+    document.getElementById('passHintEdit').style.display = 'none';
+    document.getElementById('hintPass').textContent = '';
+    resetFotoPreview();
+    usernameTocado = false;
+    adaptarDocumento();
+    {% if session.rol == 'super_admin' %}
+    if (typeof toggleEntidad === 'function') toggleEntidad();
+    {% endif %}
+    abrirModalUsuario();
+}
+
+/* ── Abrir modal para EDITAR usuario existente ────────── */
+function abrirModalEditar(id) {
+    const u = USUARIOS[id];
+    if (!u) return;
+
+    document.getElementById('formUsuario').action = `/usuarios/${id}/editar`;
+    document.getElementById('modalFormTitle').innerHTML =
+        'Editar <span style="color:var(--primary)">Usuario</span>';
+    document.getElementById('btnGuardarUsuario').textContent = 'Guardar Cambios';
+
+    // Llenar campos
+    document.getElementById('inpNombre').value   = u.nombre;
+    document.getElementById('inpUsername').value = u.nombre_usuario;
+    usernameTocado = true;
+    document.querySelector('input[name="email"]').value = u.email;
+    document.getElementById('inpTelefono').value = u.telefono;
+
+    // Tipo de documento → adaptarDocumento limpia el campo, luego se llena
+    const selDoc = document.getElementById('selTipoDoc');
+    if (selDoc) selDoc.value = u.tipo_documento || 'CC';
+    adaptarDocumento();
+    document.getElementById('inpDocumento').value = u.documento || '';
+
+    // Contraseña opcional en edición
+    document.getElementById('inpPass').required  = false;
+    document.getElementById('inpPass').value     = '';
+    document.getElementById('inpPass2').required = false;
+    document.getElementById('inpPass2').value    = '';
+    document.getElementById('passHintEdit').style.display = 'block';
+    document.getElementById('hintPass').textContent = '';
+    document.getElementById('docNombre').textContent = 'Ningún archivo seleccionado';
+
+    // Foto de perfil
+    if (u.foto) {
+        const img = document.getElementById('fotoPreview');
+        img.src = '/static/' + u.foto;
+        img.style.display = 'block';
+        document.getElementById('fotoIcon').style.display = 'none';
+    } else {
+        resetFotoPreview();
+    }
+
+    // Rol y entidad (solo super_admin)
+    {% if session.rol == 'super_admin' %}
+    document.getElementById('selectRol').value = u.rol;
+    toggleEntidad();
+    if (u.id_entidad && document.getElementById('selEntidad')) {
+        document.getElementById('selEntidad').value = u.id_entidad;
+    }
+    {% endif %}
+
+    abrirModalUsuario();
+}
+
+/* ── Confirmar eliminación con SweetAlert ─────────────── */
+function confirmarEliminarUsuario(id) {
+    const u = USUARIOS[id];
+    if (!u) return;
+    Swal.fire({
+        title: '¿Eliminar usuario?',
+        html:  `Vas a eliminar a <strong>${u.nombre}</strong>
+                (<code>${u.nombre_usuario}</code>).<br>
+                <span style="font-size:13px;color:#6b7280">Esta acción no se puede deshacer.</span>`,
+        icon:  'warning', iconColor: '#ef4444',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280',
+        confirmButtonText: '<i class="bi bi-trash3-fill"></i> Sí, eliminar',
+        cancelButtonText:  'Cancelar',
+        reverseButtons: true,
+        customClass: { popup: 'swal-redondo' }
+    }).then(r => {
+        if (r.isConfirmed) {
+            const form = document.getElementById('formEliminarUsuario');
+            form.action = `/usuarios/${id}/eliminar`;
+            form.submit();
+        }
+    });
+}
+
+/* ── Foto de perfil: previsualización circular ────────── */
+function previsualizarFoto(input) {
+    const f = input.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const img = document.getElementById('fotoPreview');
+        img.src = e.target.result;
+        img.style.display = 'block';
+        document.getElementById('fotoIcon').style.display = 'none';
+    };
+    reader.readAsDataURL(f);
+}
+
+/* ── Sugerir username a partir del nombre ─────────────── */
+let usernameTocado = false;
+document.getElementById('inpUsername').addEventListener('input', () => { usernameTocado = true; });
+
+function sugerirUsername() {
+    if (usernameTocado) return;
+    const nombre = document.getElementById('inpNombre').value;
+    const partes = nombre.trim().toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(/\s+/).filter(p => p.length > 0);
+    const inp = document.getElementById('inpUsername');
+    if (partes.length >= 2) {
+        inp.value = partes[0] + '.' + partes[partes.length - 1];
+    } else if (partes.length === 1) {
+        inp.value = partes[0];
+    } else {
+        inp.value = '';
+    }
+}
+
+/* ── Configuración por país ───────────────────────────── */
+const PAISES = {
+    CO: { codigo:'+57', tel_pat:'[0-9]{10}', tel_max:10, tel_ph:'3001234567', tel_hint:'10 dígitos',
+          docs:[{v:'CC',  l:'Cédula de Ciudadanía',  pat:'[0-9]{8,10}',      hint:'8 a 10 dígitos'},
+                {v:'CE',  l:'Cédula de Extranjería', pat:'[A-Z0-9]{4,12}',   hint:'4 a 12 caracteres'},
+                {v:'TI',  l:'Tarjeta de Identidad',  pat:'[0-9]{10,11}',     hint:'10 u 11 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    MX: { codigo:'+52', tel_pat:'[0-9]{10}', tel_max:10, tel_ph:'5512345678', tel_hint:'10 dígitos',
+          docs:[{v:'CURP',l:'CURP',                  pat:'[A-Z0-9]{18}',     hint:'18 caracteres'},
+                {v:'INE', l:'INE / IFE',             pat:'[0-9]{13}',        hint:'13 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    US: { codigo:'+1',  tel_pat:'[0-9]{10}', tel_max:10, tel_ph:'2125551234', tel_hint:'10 dígitos',
+          docs:[{v:'SSN', l:'Social Security Number',pat:'[0-9]{9}',         hint:'9 dígitos'},
+                {v:'DL',  l:"Driver's License",      pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'},
+                {v:'PAS', l:'Passport',               pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    ES: { codigo:'+34', tel_pat:'[0-9]{9}',  tel_max:9,  tel_ph:'612345678',  tel_hint:'9 dígitos',
+          docs:[{v:'DNI', l:'DNI',                   pat:'[0-9]{8}[A-Za-z]', hint:'8 dígitos + letra'},
+                {v:'NIE', l:'NIE',                   pat:'[XYZxyz][0-9]{7}[A-Za-z]',hint:'X/Y/Z + 7 dígitos + letra'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    AR: { codigo:'+54', tel_pat:'[0-9]{10}', tel_max:10, tel_ph:'1123456789', tel_hint:'10 dígitos',
+          docs:[{v:'DNI', l:'DNI',                   pat:'[0-9]{7,8}',       hint:'7 u 8 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    CL: { codigo:'+56', tel_pat:'[0-9]{9}',  tel_max:9,  tel_ph:'912345678',  tel_hint:'9 dígitos',
+          docs:[{v:'RUT', l:'RUT',                   pat:'.{7,12}',          hint:'Ej: 12345678-9'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    PE: { codigo:'+51', tel_pat:'[0-9]{9}',  tel_max:9,  tel_ph:'987654321',  tel_hint:'9 dígitos',
+          docs:[{v:'DNI', l:'DNI',                   pat:'[0-9]{8}',         hint:'8 dígitos'},
+                {v:'CE',  l:'Carné de Extranjería',  pat:'[0-9]{9}',         hint:'9 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    EC: { codigo:'+593',tel_pat:'[0-9]{9}',  tel_max:9,  tel_ph:'991234567',  tel_hint:'9 dígitos',
+          docs:[{v:'CI',  l:'Cédula de Identidad',   pat:'[0-9]{10}',        hint:'10 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    VE: { codigo:'+58', tel_pat:'[0-9]{10}', tel_max:10, tel_ph:'4121234567', tel_hint:'10 dígitos',
+          docs:[{v:'CI',  l:'Cédula de Identidad',   pat:'[VEJvej][0-9]{6,8}',hint:'V/E + 6-8 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    PA: { codigo:'+507',tel_pat:'[0-9]{8}',  tel_max:8,  tel_ph:'61234567',   tel_hint:'8 dígitos',
+          docs:[{v:'CIP', l:'Cédula de Identidad',   pat:'.{6,15}',          hint:'Formato: X-XXX-XXXXX'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+    BR: { codigo:'+55', tel_pat:'[0-9]{11}', tel_max:11, tel_ph:'11987654321',tel_hint:'11 dígitos',
+          docs:[{v:'CPF', l:'CPF',                   pat:'[0-9]{11}',        hint:'11 dígitos'},
+                {v:'RG',  l:'RG',                    pat:'[0-9]{7,9}',       hint:'7 a 9 dígitos'},
+                {v:'PAS', l:'Pasaporte',              pat:'[A-Z0-9]{6,12}',   hint:'6 a 12 caracteres'}]},
+};
+
+function adaptarNacionalidad() {
+    const pais = document.getElementById('selNacionalidad').value;
+    const cfg  = PAISES[pais] || PAISES.CO;
+    document.getElementById('telCodigo').textContent = cfg.codigo;
+    const tel = document.getElementById('inpTelefono');
+    tel.pattern = cfg.tel_pat; tel.maxLength = cfg.tel_max;
+    tel.placeholder = cfg.tel_ph; tel.value = '';
+    document.getElementById('hintTel').textContent = `Debe tener ${cfg.tel_hint}`;
+    const sel = document.getElementById('selTipoDoc');
+    sel.innerHTML = '';
+    cfg.docs.forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.v; o.textContent = d.l;
+        o.dataset.pat = d.pat; o.dataset.hint = d.hint;
+        sel.appendChild(o);
+    });
+    adaptarDocumento();
+}
+
+function adaptarDocumento() {
+    const sel = document.getElementById('selTipoDoc');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    const inp = document.getElementById('inpDocumento');
+    inp.pattern = opt.dataset.pat;
+    inp.placeholder = opt.dataset.hint;
+    inp.value = '';
+    document.getElementById('hintDoc').textContent = opt.dataset.hint;
+}
+
+/* ── Toggle contraseña ────────────────────────────────── */
+function togglePass(inputId, iconId) {
+    const inp = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (inp.type === 'password') { inp.type = 'text'; icon.className = 'bi bi-eye-slash'; }
+    else { inp.type = 'password'; icon.className = 'bi bi-eye'; }
+}
+
+/* ── Nombre del archivo ───────────────────────────────── */
+function mostrarNombreDoc(input) {
+    const f = input.files[0];
+    document.getElementById('docNombre').textContent = f
+        ? (f.name.length > 30 ? f.name.substring(0, 28) + '…' : f.name)
+        : 'Ningún archivo seleccionado';
+}
+
+/* ── Validación contraseñas ───────────────────────────── */
+const inpPass2 = document.getElementById('inpPass2');
+const hintPass = document.getElementById('hintPass');
+inpPass2.addEventListener('input', () => {
+    const p1 = document.getElementById('inpPass').value;
+    if (inpPass2.value && inpPass2.value !== p1) {
+        hintPass.textContent = 'Las contraseñas no coinciden';
+        inpPass2.classList.add('invalid');
+    } else {
+        hintPass.textContent = '';
+        inpPass2.classList.remove('invalid');
+    }
+});
+document.getElementById('formUsuario').addEventListener('submit', function(e) {
+    const p1 = document.getElementById('inpPass').value;
+    if (p1 !== inpPass2.value) {
+        e.preventDefault();
+        hintPass.textContent = 'Las contraseñas no coinciden';
+        inpPass2.classList.add('invalid');
+        inpPass2.focus();
+    }
+});
+
+{% if session.rol == 'super_admin' %}
+function toggleEntidad() {
+    const rol        = document.getElementById('selectRol').value;
+    const grp        = document.getElementById('grupoEntidad');
+    const sel        = document.getElementById('selEntidad');
+    const esSuperAdm = rol === 'super_admin';
+    grp.style.display = esSuperAdm ? 'none' : '';
+    if (sel) sel.required = !esSuperAdm;
+}
+{% endif %}
+
+/* ── Toggle vista tabla / tarjetas ─────────────────── */
+function setVistaUsr(modo) {
+    const tbl   = document.querySelector('.tabla-card');
+    const cards = document.getElementById('usrCardsContainer');
+    const btnT  = document.getElementById('btnVistaTbl');
+    const btnC  = document.getElementById('btnVistaCards');
+    if (modo === 'cards') {
+        if (tbl)   tbl.style.display   = 'none';
+        if (cards) cards.style.display = 'block';
+        if (btnT)  btnT.classList.remove('active');
+        if (btnC)  btnC.classList.add('active');
+    } else {
+        if (tbl)   tbl.style.display   = 'block';
+        if (cards) cards.style.display = 'none';
+        if (btnT)  btnT.classList.add('active');
+        if (btnC)  btnC.classList.remove('active');
+    }
+    try { localStorage.setItem('usr_vista', modo); } catch {}
+}
+
+/* ── Filtrar tabla y tarjetas ─────────────────────── */
+function filtrarUsuarios() {
+    const texto   = (document.getElementById('filtroTexto').value || '').toLowerCase().trim();
+    const rol     = document.getElementById('filtroRol').value;
+    const entEl   = document.getElementById('filtroEntidad');
+    const entidad = entEl ? entEl.value : '';
+
+    const rows = document.querySelectorAll('#tablaBody tr');
+    let visible = 0;
+    rows.forEach(row => {
+        const ok = (!texto   || (row.dataset.nombre||'').includes(texto) || (row.dataset.doc||'').toLowerCase().includes(texto))
+                && (!rol     || row.dataset.rol === rol)
+                && (!entidad || row.dataset.entidad === entidad);
+        row.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+    });
+
+    document.querySelectorAll('#usrGrid .usr-card').forEach(card => {
+        const ok = (!texto   || (card.dataset.nombre||'').includes(texto) || (card.dataset.doc||'').toLowerCase().includes(texto))
+                && (!rol     || card.dataset.rol === rol)
+                && (!entidad || card.dataset.entidad === entidad);
+        card.style.display = ok ? '' : 'none';
+    });
+
+    const el = document.getElementById('filtroResultados');
+    const total = rows.length;
+    if (el) el.textContent = visible < total
+        ? `Mostrando ${visible} de ${total} resultado${total !== 1 ? 's' : ''}`
+        : '';
+}
+function limpiarFiltrosUsuarios() {
+    ['filtroTexto','filtroRol','filtroEntidad'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    filtrarUsuarios();
+}
+
+/* ── Auto-abrir modal si hay error + restaurar vista ─── */
+document.addEventListener('DOMContentLoaded', () => {
+    // Restaurar preferencia de vista
+    let v = 'tabla';
+    try { v = localStorage.getItem('usr_vista') || 'tabla'; } catch {}
+    setVistaUsr(v);
+
+    {% if form_error %}
+        {% if flash_edit_id %}
+        abrirModalEditar({{ flash_edit_id }});
+        {% else %}
+        abrirModalNuevo();
+        {% endif %}
+    {% endif %}
+});
+
+/* ── Flash: usuario creado (SweetAlert) ───────────────── */
+{% if flash_nuevo %}
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({
+        title: 'Usuario creado',
+        html: `
+            <p style="margin-bottom:16px">
+                <strong>{{ flash_nuevo.nombre }}</strong> ha sido registrado exitosamente.
+            </p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+                        padding:16px;text-align:left;font-size:13px">
+                <div style="margin-bottom:10px">
+                    <span style="color:#64748b;font-size:10px;font-weight:700;
+                                 text-transform:uppercase;letter-spacing:1px">Nombre de usuario</span><br>
+                    <code style="background:#eff6ff;border:1px solid #bfdbfe;
+                                 padding:4px 12px;border-radius:6px;font-size:15px;
+                                 font-weight:700;display:inline-block;margin-top:4px">{{ flash_nuevo.nombre_usuario }}</code>
+                </div>
+                <div>
+                    <span style="color:#64748b;font-size:10px;font-weight:700;
+                                 text-transform:uppercase;letter-spacing:1px">Contraseña inicial</span><br>
+                    <code style="background:#fef9c3;border:1px solid #fcd34d;
+                                 padding:5px 14px;border-radius:6px;font-size:16px;
+                                 font-weight:700;letter-spacing:2px;display:inline-block;margin-top:4px">{{ flash_nuevo.password }}</code>
+                </div>
+            </div>
+            <p style="margin-top:14px;font-size:11px;color:#94a3b8">
+                &#9888; Comparte estas credenciales de forma segura. No volverán a mostrarse.
+            </p>`,
+        icon: 'success',
+        confirmButtonColor: '#b8860b',
+        confirmButtonText: 'Entendido',
+        width: 480,
+        customClass: { popup: 'swal-redondo' }
+    });
+});
+{% endif %}
+</script>
+<style>.swal-redondo { border-radius: 16px !important; font-family: "Segoe UI", sans-serif !important; }</style>
+{% endblock %}

@@ -55,38 +55,72 @@ def _query(sql: str, params=(), one=False, write=False):
 #  ENTIDADES  (tabla Entidad)
 # ─────────────────────────────────────────────
 
-_CAMPOS_ENTIDAD = """IdEntidad AS id, RazonSocial AS razon_social, NitCif AS nit_cif,
+_CAMPOS_ENTIDAD = """IdEntidad AS id, IdEntidadPadre AS id_entidad_padre,
+    RazonSocial AS razon_social, NitCif AS nit_cif, Email AS email,
     Telefono AS telefono, Pais AS pais, Ciudad AS ciudad, Direccion AS direccion,
-    LogoPath AS logo_path, Activo AS activo"""
+    LogoPath AS logo_path, Activo AS activo, FechaRegistro AS fecha_registro"""
 
 def get_all_entidades():
-    return _query(f"SELECT {_CAMPOS_ENTIDAD} FROM Entidad WHERE Activo = 1 ORDER BY RazonSocial")
+    """Entidades activas en orden de árbol: cada entidad seguida de sus sub-entidades.
+
+    WITH RECURSIVE recorre el árbol desde las entidades principales (sin padre)
+    hacia abajo. 'nivel' es la profundidad (0 = principal, 1 = sub-entidad, ...),
+    'ruta' guarda los nombres desde la raíz, para ordenar padre -> hijos, y
+    'ruta_ids' los ids de esa misma cadena (sirve para filtrar por entidad principal).
+    """
+    return _query(f"""
+        WITH RECURSIVE arbol AS (
+            SELECT IdEntidad, 0 AS nivel, ARRAY[RazonSocial::TEXT] AS ruta,
+                   ARRAY[IdEntidad] AS ruta_ids
+            FROM Entidad
+            WHERE Activo = 1 AND IdEntidadPadre IS NULL
+          UNION ALL
+            SELECT h.IdEntidad, a.nivel + 1, a.ruta || h.RazonSocial::TEXT,
+                   a.ruta_ids || h.IdEntidad
+            FROM Entidad h
+            JOIN arbol a ON h.IdEntidadPadre = a.IdEntidad
+            WHERE h.Activo = 1
+        )
+        SELECT e.*, a.nivel, a.ruta_ids, p.RazonSocial AS nombre_padre
+        FROM arbol a
+        JOIN (SELECT {_CAMPOS_ENTIDAD} FROM Entidad) e ON e.id = a.IdEntidad
+        LEFT JOIN Entidad p ON p.IdEntidad = e.id_entidad_padre
+        ORDER BY a.ruta
+    """)
 
 def get_entidad_by_id(id_entidad: int):
     return _query(f"SELECT {_CAMPOS_ENTIDAD} FROM Entidad WHERE IdEntidad = %s", (id_entidad,), one=True)
 
-def create_entidad(razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path=None):
+def create_entidad(razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path=None,
+                   email=None, id_entidad_padre=None):
     return _query(
-        """INSERT INTO Entidad (RazonSocial, NitCif, Telefono, Pais, Ciudad, Direccion, LogoPath)
-           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-        (razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path),
+        """INSERT INTO Entidad (RazonSocial, NitCif, Telefono, Pais, Ciudad, Direccion, LogoPath,
+                                Email, IdEntidadPadre)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path,
+         email or None, id_entidad_padre or None),
         write=True
     )
 
-def update_entidad(id_entidad, razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path=None):
+def update_entidad(id_entidad, razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path=None,
+                   email=None, id_entidad_padre=None):
+    sets = ["RazonSocial=%s", "NitCif=%s", "Telefono=%s", "Pais=%s", "Ciudad=%s",
+            "Direccion=%s", "Email=%s", "IdEntidadPadre=%s"]
+    params = [razon_social, nit_cif, telefono, pais, ciudad, direccion,
+              email or None, id_entidad_padre or None]
     if logo_path:
-        return _query(
-            """UPDATE Entidad SET RazonSocial=%s, NitCif=%s, Telefono=%s,
-               Pais=%s, Ciudad=%s, Direccion=%s, LogoPath=%s WHERE IdEntidad=%s""",
-            (razon_social, nit_cif, telefono, pais, ciudad, direccion, logo_path, id_entidad),
-            write=True
-        )
+        sets.append("LogoPath=%s")
+        params.append(logo_path)
+    params.append(id_entidad)
     return _query(
-        """UPDATE Entidad SET RazonSocial=%s, NitCif=%s, Telefono=%s,
-           Pais=%s, Ciudad=%s, Direccion=%s WHERE IdEntidad=%s""",
-        (razon_social, nit_cif, telefono, pais, ciudad, direccion, id_entidad),
-        write=True
+        f"UPDATE Entidad SET {', '.join(sets)} WHERE IdEntidad=%s",
+        tuple(params), write=True
     )
+
+def contar_subentidades_activas(id_entidad: int) -> int:
+    row = _query("SELECT COUNT(*) AS total FROM Entidad WHERE IdEntidadPadre = %s AND Activo = 1",
+                 (id_entidad,), one=True)
+    return row['total'] if row else 0
 
 def delete_entidad(id_entidad: int):
     return _query("UPDATE Entidad SET Activo=0 WHERE IdEntidad=%s", (id_entidad,), write=True)

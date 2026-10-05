@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CANGUARD - Tactical Portal</title>
+    <title>CANGUARDAA - Tactical Portal</title>
     <style>
         :root {
             --primary: #FFD700; /* Oro Eléctrico Brillante */
@@ -133,6 +133,17 @@
             background: rgba(255, 215, 0, 0.05);
         }
 
+        /* Campo de contraseña con botón "ojito" para mostrar/ocultar */
+        .pass-wrap { position: relative; }
+        .pass-wrap input { padding-right: 50px; }
+        .btn-ojo {
+            position: absolute; top: 50%; right: 12px; transform: translateY(-50%);
+            background: none; border: none; padding: 4px; cursor: pointer;
+            color: rgba(255, 255, 255, 0.5); display: flex; transition: color 0.3s;
+        }
+        .btn-ojo:hover, .btn-ojo:focus-visible { color: var(--primary); outline: none; }
+        .btn-ojo svg { width: 20px; height: 20px; }
+
         .btn-access {
             width: 100%;
             padding: 18px;
@@ -242,7 +253,10 @@
             <div class="form-group">
                 <label>Código de Acceso</label>
                 <!-- name="password" debe coincidir con el parámetro del Form en main.py -->
-                <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                <div class="pass-wrap">
+                    <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                    <button type="button" class="btn-ojo" onclick="alternarClave(this)" aria-label="Mostrar contraseña"></button>
+                </div>
             </div>
 
             <button type="submit" class="btn-access">Verificar Identidad</button>
@@ -252,6 +266,24 @@
             </div>
         </form>
     </div>
+
+    <script>
+        // Íconos SVG del ojito: abierto (mostrar) y tachado (ocultar)
+        const OJO_ABIERTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        const OJO_TACHADO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+        // Cambia el input entre "password" (puntos) y "text" (visible)
+        function alternarClave(boton) {
+            const input = boton.previousElementSibling;
+            const mostrar = input.type === 'password';
+            input.type = mostrar ? 'text' : 'password';
+            boton.innerHTML = mostrar ? OJO_TACHADO : OJO_ABIERTO;
+            boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        }
+
+        // Al cargar, todos los botones arrancan con el ojo abierto
+        document.querySelectorAll('.btn-ojo').forEach(b => b.innerHTML = OJO_ABIERTO);
+    </script>
 
 </body>
 </html>

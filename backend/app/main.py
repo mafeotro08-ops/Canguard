@@ -10,6 +10,7 @@ import re
 import shutil
 import secrets
 import hashlib
+from email.utils import parseaddr
 
 try:
     from dotenv import load_dotenv
@@ -21,6 +22,7 @@ from datetime import date, timedelta
 from .models import (
     verify_user, get_all_entidades, get_entidad_by_id,
     create_entidad, update_entidad, delete_entidad,
+    contar_subentidades_activas,
     get_all_usuarios, create_usuario, update_usuario, delete_usuario,
     documento_existe, email_existe, username_existe,
     username_existe_otro, email_existe_otro,
@@ -37,6 +39,7 @@ from .models import (
     get_token_recuperacion_valido, usar_token_recuperacion,
 )
 from .correo import enviar_correo
+from psycopg import errors as pg_errors
 from .auth import (
     crear_sesion, es_sesion_valida, es_super_admin, cerrar_sesion,
     redirigir_si_no_autenticado, redirigir_si_no_super_admin,
@@ -261,7 +264,28 @@ async def listar_entidades(request: Request):
     if r:
         return r
     entidades = get_all_entidades() or []
-    return templates.TemplateResponse('entidades.html', ctx(request, entidades=entidades))
+    return templates.TemplateResponse('entidades.html', ctx(
+        request, entidades=entidades, modo='entidades', flash=request.session.pop('flash_entidad', None)))
+
+
+@app.get('/subentidades', response_class=HTMLResponse)
+async def listar_subentidades(request: Request, padre: Optional[int] = None):
+    """Módulo de sub-entidades (CAI, estaciones, ...). Usa la misma plantilla que
+    entidades en modo 'sub'. Si llega ?padre=ID, el formulario se abre con esa
+    entidad principal ya seleccionada (botón de la lista de entidades)."""
+    r = redirigir_si_no_super_admin(request)
+    if r:
+        return r
+    entidades = get_all_entidades() or []
+    return templates.TemplateResponse(
+        'entidades.html', ctx(request, entidades=entidades, modo='sub', abrir_padre=padre,
+                              flash=request.session.pop('flash_entidad', None)))
+
+
+def _flash_entidad(request: Request, titulo: str, texto: str):
+    """Guarda en la sesión el mensaje de éxito; la lista de entidades lo lee
+    (y lo borra) al cargar, y lo muestra con SweetAlert."""
+    request.session['flash_entidad'] = {'titulo': titulo, 'texto': texto}
 
 
 def _guardar_logo(razon_social: str, archivo: Optional[UploadFile]) -> str | None:
@@ -287,6 +311,82 @@ async def ver_registro_entidad(request: Request):
     return RedirectResponse(url='/entidades', status_code=302)
 
 
+def _modo(volver: str) -> str:
+    """Desde qué módulo se envió el formulario: 'sub' (Sub-entidades) o 'entidades'."""
+    return 'sub' if volver == 'subentidades' else 'entidades'
+
+
+def _url_modulo(volver: str) -> str:
+    # Solo se aceptan estas dos rutas, para que el formulario no pueda redirigir a cualquier lado.
+    return '/subentidades' if _modo(volver) == 'sub' else '/entidades'
+
+
+def _error_entidades(request: Request, mensaje: str, volver: str = 'entidades'):
+    """Vuelve a mostrar el módulo (entidades o sub-entidades) con un mensaje de error."""
+    entidades = get_all_entidades() or []
+    return templates.TemplateResponse(
+        'entidades.html', ctx(request, entidades=entidades, error=mensaje, modo=_modo(volver)),
+        status_code=400,
+    )
+
+
+def _id_padre(valor: str) -> int | None:
+    """El <select> de entidad padre manda '' cuando es una entidad principal."""
+    return int(valor) if valor and valor.isdigit() else None
+
+
+def _error_jerarquia(id_padre: int | None, id_ent: int | None = None) -> str | None:
+    """Solo hay dos niveles: Entidad principal -> Sub-entidad.
+    Devuelve el mensaje de error si la combinación no es válida, o None si está bien."""
+    if not id_padre:
+        return None
+    padre = get_entidad_by_id(id_padre)
+    if not padre:
+        return 'La entidad principal seleccionada no existe.'
+    if padre.get('id_entidad_padre'):
+        return 'Una sub-entidad no puede tener sub-entidades. Seleccione una entidad principal.'
+    if id_ent and (id_padre == id_ent or contar_subentidades_activas(id_ent)):
+        return 'Esta entidad tiene sub-entidades, por eso no puede convertirse en sub-entidad.'
+    return None
+
+
+def _avisar_entidad_creada(request: Request, id_ent: int):
+    """Envía al correo administrativo de la entidad el aviso de que fue creada,
+    con sus datos para que los verifique."""
+    ent = get_entidad_by_id(id_ent)
+    if not ent or not ent.get('email'):
+        return
+    padre = get_entidad_by_id(ent['id_entidad_padre']) if ent.get('id_entidad_padre') else None
+    datos = {
+        'razon_social': ent['razon_social'], 'nit_cif': ent['nit_cif'],
+        'ciudad': ent['ciudad'], 'direccion': ent['direccion'], 'telefono': ent['telefono'],
+        'nombre_padre': padre['razon_social'] if padre else None,
+        # A quién escribir si los datos están mal: CONTACTO_ADMIN del .env, o el remitente.
+        # parseaddr deja solo la dirección: 'CanGuard K9 <x@y.com>' -> 'x@y.com'.
+        'contacto': parseaddr(os.getenv('CONTACTO_ADMIN') or os.getenv('SMTP_FROM') or '')[1],
+        'app_url': os.getenv('APP_URL', str(request.base_url)).rstrip('/'),
+    }
+    html = templates.get_template('emails/entidad_creada.html').render(**datos)
+    lineas = [
+        f"Su entidad {datos['razon_social']} fue registrada en el sistema CanGuard K9.",
+        "",
+        "Verifique que los datos sean correctos:",
+        f"  Razón social: {datos['razon_social']}",
+        f"  NIT: {datos['nit_cif']}",
+    ]
+    if datos['nombre_padre']:
+        lineas.append(f"  Depende de: {datos['nombre_padre']}")
+    lineas += [
+        f"  Ciudad: {datos['ciudad'] or '—'}",
+        f"  Dirección: {datos['direccion'] or '—'}",
+        f"  Teléfono: {datos['telefono'] or '—'}",
+        "",
+        "Si algún dato no es correcto, contacte al administrador de CanGuard"
+        + (f": {datos['contacto']}" if datos['contacto'] else "."),
+    ]
+    enviar_correo(ent['email'], 'Su entidad fue registrada · CanGuard K9', '\n'.join(lineas), html)
+
+
 @app.post('/RegistroEntidad', response_class=HTMLResponse)
 async def crear_entidad_post(
     request:          Request,
@@ -296,25 +396,36 @@ async def crear_entidad_post(
     PaisEntidad:      str        = Form('CO'),
     UbicacionEntidad: str        = Form(''),
     DireccionEntidad: str        = Form(''),
+    EmailEntidad:     str        = Form(''),
+    IdEntidadPadre:   str        = Form(''),
+    Volver:           str        = Form('entidades'),
     Logo:             Optional[UploadFile] = File(None),
 ):
     r = redirigir_si_no_super_admin(request)
     if r:
         return r
+    id_padre = _id_padre(IdEntidadPadre)
+    # En el módulo Sub-entidades la entidad principal es obligatoria.
+    if _modo(Volver) == 'sub' and not id_padre:
+        return _error_entidades(request, 'Seleccione la entidad principal de la sub-entidad.', Volver)
+    error = _error_jerarquia(id_padre)
+    if error:
+        return _error_entidades(request, error, Volver)
     logo_path = _guardar_logo(RazonSocial, Logo)
     try:
-        create_entidad(RazonSocial, NitCif, TelefonoEntidad,
-                       PaisEntidad, UbicacionEntidad, DireccionEntidad, logo_path)
-    except Exception as e:
-        if '1062' in str(e):
-            entidades = get_all_entidades() or []
-            return templates.TemplateResponse(
-                'entidades.html',
-                ctx(request, entidades=entidades, error='Ya existe una entidad con ese NIT/CIF.'),
-                status_code=400,
-            )
-        raise
-    return RedirectResponse(url='/entidades', status_code=303)
+        id_ent = create_entidad(RazonSocial, NitCif, TelefonoEntidad,
+                                PaisEntidad, UbicacionEntidad, DireccionEntidad, logo_path,
+                                email=EmailEntidad.strip(), id_entidad_padre=id_padre)
+    except pg_errors.UniqueViolation:
+        # PostgreSQL lanza UniqueViolation cuando el NIT ya existe (restricción UqEntidadNit).
+        return _error_entidades(request, 'Ya existe una entidad con ese NIT/CIF.', Volver)
+    _avisar_entidad_creada(request, id_ent)
+    tipo = 'Sub-entidad' if id_padre else 'Entidad'
+    texto = f'{RazonSocial} quedó registrada en CanGuard.'
+    if EmailEntidad.strip():
+        texto += f' Se envió un aviso a {EmailEntidad.strip()}.'
+    _flash_entidad(request, f'¡{tipo} creada con éxito!', texto)
+    return RedirectResponse(url=_url_modulo(Volver), status_code=303)
 
 
 @app.post('/entidades/{id_ent}/editar', response_class=HTMLResponse)
@@ -327,24 +438,46 @@ async def editar_entidad_post(
     PaisEntidad:      str        = Form('CO'),
     UbicacionEntidad: str        = Form(''),
     DireccionEntidad: str        = Form(''),
+    EmailEntidad:     str        = Form(''),
+    IdEntidadPadre:   str        = Form(''),
+    Volver:           str        = Form('entidades'),
     Logo:             Optional[UploadFile] = File(None),
 ):
     r = redirigir_si_no_super_admin(request)
     if r:
         return r
+    id_padre = _id_padre(IdEntidadPadre)
+    if _modo(Volver) == 'sub' and not id_padre:
+        return _error_entidades(request, 'Seleccione la entidad principal de la sub-entidad.', Volver)
+    error = _error_jerarquia(id_padre, id_ent)
+    if error:
+        return _error_entidades(request, error, Volver)
     logo_path = _guardar_logo(RazonSocial, Logo)
-    update_entidad(id_ent, RazonSocial, NitCif, TelefonoEntidad,
-                   PaisEntidad, UbicacionEntidad, DireccionEntidad, logo_path)
-    return RedirectResponse(url='/entidades', status_code=303)
+    try:
+        update_entidad(id_ent, RazonSocial, NitCif, TelefonoEntidad,
+                       PaisEntidad, UbicacionEntidad, DireccionEntidad, logo_path,
+                       email=EmailEntidad.strip(), id_entidad_padre=id_padre)
+    except pg_errors.UniqueViolation:
+        return _error_entidades(request, 'Ya existe una entidad con ese NIT/CIF.', Volver)
+    _flash_entidad(request, 'Cambios guardados', f'Los datos de {RazonSocial} se actualizaron correctamente.')
+    return RedirectResponse(url=_url_modulo(Volver), status_code=303)
 
 
 @app.post('/entidades/{id_ent}/eliminar')
-async def eliminar_entidad_post(request: Request, id_ent: int):
+async def eliminar_entidad_post(request: Request, id_ent: int, Volver: str = Form('entidades')):
     r = redirigir_si_no_super_admin(request)
     if r:
         return r
+    # Si se desactiva una entidad con sub-entidades activas, estas quedarían
+    # "huérfanas" y desaparecerían de la lista: primero hay que moverlas o eliminarlas.
+    if contar_subentidades_activas(id_ent):
+        return _error_entidades(request, 'No se puede eliminar: la entidad tiene sub-entidades activas. '
+                                         'Elimínelas o cámbielas de entidad primero.', Volver)
+    ent = get_entidad_by_id(id_ent)
     delete_entidad(id_ent)
-    return RedirectResponse(url='/entidades', status_code=303)
+    if ent:
+        _flash_entidad(request, 'Entidad eliminada', f'{ent["razon_social"]} fue eliminada.')
+    return RedirectResponse(url=_url_modulo(Volver), status_code=303)
 
 
 # ---------------------------------------------------------------------------

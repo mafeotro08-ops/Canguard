@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<!--
+  Correo de aviso: la entidad fue registrada en CanGuard.
+  Se envía al correo administrativo de la entidad para que verifique sus datos.
+  Igual que recuperacion.html: diseño con <table> y estilos inline,
+  porque Gmail/Outlook borran el CSS moderno.
+  Variables: razon_social, nit_cif, ciudad, direccion, telefono,
+             nombre_padre (opcional), contacto, app_url
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entidad registrada</title>
+</head>
+<body style="margin:0; padding:0; background-color:#eef1f5;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef1f5;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+
+                <!-- Tarjeta principal (máx. 560px de ancho) -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="max-width:560px; background-color:#ffffff; border-radius:12px; overflow:hidden; font-family:'Segoe UI', Arial, sans-serif;">
+
+                    <!-- Encabezado oscuro con la marca -->
+                    <tr>
+                        <td align="center" style="background-color:#020810; padding:32px 24px; border-bottom:4px solid #FFD700;">
+                            <div style="font-size:28px; font-weight:900; letter-spacing:6px; color:#ffffff;">
+                                CAN<span style="color:#FFD700;">GUARD</span>
+                            </div>
+                            <div style="font-size:11px; letter-spacing:4px; color:#FFD700; margin-top:6px;">
+                                SISTEMA TÁCTICO K9
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Cuerpo del mensaje -->
+                    <tr>
+                        <td style="padding:36px 36px 8px 36px; color:#1f2937;">
+                            <h1 style="margin:0 0 16px 0; font-size:22px; color:#020810;">
+                                Su entidad fue registrada
+                            </h1>
+                            <p style="margin:0 0 24px 0; font-size:15px; line-height:24px;">
+                                La entidad <strong>{{ razon_social }}</strong> fue creada en el sistema
+                                <strong>CanGuard K9</strong>. Por favor verifique que los datos registrados sean correctos:
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Datos registrados -->
+                    <tr>
+                        <td style="padding:0 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="border:1px solid #e5e7eb; border-radius:8px; font-size:14px; line-height:20px;">
+                                <tr>
+                                    <td style="padding:10px 16px; color:#6b7280; width:40%; border-bottom:1px solid #f1f3f6;">Razón social</td>
+                                    <td style="padding:10px 16px; color:#020810; font-weight:600; border-bottom:1px solid #f1f3f6;">{{ razon_social }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 16px; color:#6b7280; border-bottom:1px solid #f1f3f6;">NIT</td>
+                                    <td style="padding:10px 16px; color:#020810; font-weight:600; border-bottom:1px solid #f1f3f6;">{{ nit_cif }}</td>
+                                </tr>
+                                {% if nombre_padre %}
+                                <tr>
+                                    <td style="padding:10px 16px; color:#6b7280; border-bottom:1px solid #f1f3f6;">Depende de</td>
+                                    <td style="padding:10px 16px; color:#020810; font-weight:600; border-bottom:1px solid #f1f3f6;">{{ nombre_padre }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr>
+                                    <td style="padding:10px 16px; color:#6b7280; border-bottom:1px solid #f1f3f6;">Ciudad</td>
+                                    <td style="padding:10px 16px; color:#020810; font-weight:600; border-bottom:1px solid #f1f3f6;">{{ ciudad or '—' }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 16px; color:#6b7280; border-bottom:1px solid #f1f3f6;">Dirección</td>
+                                    <td style="padding:10px 16px; color:#020810; font-weight:600; border-bottom:1px solid #f1f3f6;">{{ direccion or '—' }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px 16px; color:#6b7280;">Teléfono</td>
+                                    <td style="padding:10px 16px; color:#020810; font-weight:600;">{{ telefono or '—' }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Aviso: si algo está mal, contactar al administrador -->
+                    <tr>
+                        <td style="padding:0 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#fffbea; border-left:4px solid #FFD700; border-radius:6px;">
+                                <tr>
+                                    <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#6b5300;">
+                                        ⚠ Si algún dato no es correcto, contacte al administrador de CanGuard{% if contacto %}:
+                                        <a href="mailto:{{ contacto }}" style="color:#6b5300; font-weight:700;">{{ contacto }}</a>{% else %}.{% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Pie -->
+                    <tr>
+                        <td style="padding:20px 36px; background-color:#f8fafc; border-top:1px solid #e5e7eb; font-size:12px; line-height:18px; color:#6b7280;">
+                            Recibe este correo porque esta dirección fue registrada como correo administrativo
+                            de la entidad en <a href="{{ app_url }}" style="color:#6b7280;">CanGuard K9</a>.
+                        </td>
+                    </tr>
+                </table>
+
+                <div style="font-family:'Segoe UI', Arial, sans-serif; font-size:11px; color:#9ca3af; margin-top:16px;">
+                    © CanGuard K9 · Este es un mensaje automático, no respondas a este correo.
+                </div>
+
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

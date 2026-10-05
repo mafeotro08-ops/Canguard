@@ -59,6 +59,31 @@
     .btn-edit:hover  { background: #22c55e; color: #fff; }
     .btn-del   { background: transparent; border-color: #ef4444; color: #ef4444; }
     .btn-del:hover   { background: #ef4444; color: #fff; }
+    .btn-sub   { background: transparent; border-color: var(--primary); color: var(--primary); }
+    .btn-sub:hover   { background: var(--primary); color: #111; }
+
+    /* ── Jerarquía de sub-entidades ─────────────────────── */
+    .sub-flecha { color: var(--text-muted); margin-right: 6px; }
+    .sub-de { display: block; font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
+    .badge-sub {
+        display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .5px;
+        padding: 2px 8px; border-radius: 50px; background: var(--surface-2);
+        color: var(--text-muted); border: 1px solid var(--border);
+    }
+
+    /* ── Paso 1 del formulario de sub-entidad: entidad principal ── */
+    .paso-padre {
+        background: var(--surface-2); border: 1.5px solid var(--border);
+        border-left: 4px solid var(--primary); border-radius: 10px;
+        padding: 14px 16px; margin-bottom: 22px;
+    }
+
+    /* ── Mensaje de error ───────────────────────────────── */
+    .alert-error {
+        background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.4);
+        color: #b91c1c; border-radius: 8px; padding: 12px 16px;
+        font-size: 13px; margin-bottom: 16px; display: flex; gap: 8px; align-items: center;
+    }
 
     /* ── Toggle vista ────────────────────────────────────── */
     .vista-toggle { display: flex; gap: 4px; }
@@ -304,9 +329,25 @@
     .btn-guardar:hover { background: var(--primary-hover); transform: translateY(-1px); }
 </style>
 
+{# Esta plantilla sirve a dos módulos:
+     modo == 'entidades' -> /entidades     : solo entidades principales (sin padre)
+     modo == 'sub'       -> /subentidades  : solo sub-entidades (CAI, estaciones, ...)
+   'entidades' siempre trae TODAS (en orden de árbol) porque el formulario y el
+   JavaScript necesitan conocerlas; 'lista' es lo que se muestra en este módulo. #}
+{% set es_sub = (modo == 'sub') %}
+{% if es_sub %}
+    {% set lista = entidades | selectattr('nivel', 'gt', 0) | list %}
+{% else %}
+    {% set lista = entidades | selectattr('nivel', 'equalto', 0) | list %}
+{% endif %}
+
 <!-- ═══════════ ENCABEZADO ═══════════ -->
 <div class="page-header">
+    {% if es_sub %}
+    <h1>SUB-<span>ENTIDADES</span></h1>
+    {% else %}
     <h1>ENTIDADES <span>REGISTRADAS</span></h1>
+    {% endif %}
     <div style="display:flex;gap:10px;align-items:center;">
         <div class="vista-toggle">
             <button id="btnVistaTbl" class="btn-vista active" onclick="setVistaEnt('tabla')" title="Vista tabla">
@@ -317,10 +358,18 @@
             </button>
         </div>
         <button class="btn-primary-act" onclick="abrirModalNuevo()">
+            {% if es_sub %}
+            <i class="bi bi-diagram-3-fill"></i> NUEVA SUB-ENTIDAD
+            {% else %}
             <i class="bi bi-building-fill-add"></i> NUEVA ENTIDAD
+            {% endif %}
         </button>
     </div>
 </div>
+
+{% if error %}
+<div class="alert-error"><i class="bi bi-exclamation-triangle-fill"></i> {{ error }}</div>
+{% endif %}
 
 <!-- ═══════════ FILTROS ═══════════ -->
 <div class="filter-bar">
@@ -331,6 +380,15 @@
             <input type="text" id="filtroTexto" class="filter-input"
                    placeholder="Razón social o NIT..." oninput="filtrarEntidades()">
         </div>
+        {% if es_sub %}
+        <!-- Muestra solo las sub-entidades que dependen (a cualquier nivel) de la entidad elegida -->
+        <select id="filtroPrincipal" class="filter-select" onchange="filtrarEntidades()">
+            <option value="">Todas las entidades</option>
+            {% for p in entidades if p.nivel == 0 %}
+            <option value="{{ p.id }}">{{ p.razon_social }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
         <button class="filter-clear" onclick="limpiarFiltrosEntidades()">
             <i class="bi bi-x-circle"></i> Limpiar
         </button>
@@ -340,14 +398,14 @@
 
 <!-- ═══════════ TABLA ═══════════ -->
 <div class="tabla-card">
-    {% if entidades %}
+    {% if lista %}
     <table>
         <thead>
             <tr>
                 <th>Logo</th>
                 <th>Razón Social</th>
+                {% if es_sub %}<th>Depende de</th>{% endif %}
                 <th>NIT</th>
-                <th>País</th>
                 <th>Ciudad</th>
                 <th>Teléfono</th>
                 <th>Registro</th>
@@ -355,10 +413,11 @@
             </tr>
         </thead>
         <tbody id="tablaEntBody">
-            {% for e in entidades %}
+            {% for e in lista %}
+            <!-- data-ancestros: ids de las entidades de las que depende (para el filtro) -->
             <tr data-razon="{{ e.razon_social | lower }}"
                 data-nit="{{ e.nit_cif | lower }}"
-                data-pais="{{ e.pais or '' }}">
+                data-ancestros=",{{ e.ruta_ids[:-1] | join(',') }},">
                 <td>
                     {% if e.logo_path %}
                         <img src="/static/{{ e.logo_path }}" class="logo-thumb" alt="logo">
@@ -366,13 +425,23 @@
                         <div class="logo-placeholder"><i class="bi bi-building"></i></div>
                     {% endif %}
                 </td>
+                {% if es_sub %}
                 <td><strong>{{ e.razon_social }}</strong></td>
+                <td><span class="badge-sub"><i class="bi bi-diagram-3"></i> {{ e.nombre_padre }}</span></td>
+                {% else %}
+                <td><strong>{{ e.razon_social }}</strong></td>
+                {% endif %}
                 <td>{{ e.nit_cif }}</td>
-                <td>🇨🇴 Colombia</td>
                 <td>{{ e.ciudad or '—' }}</td>
                 <td>{{ e.telefono or '—' }}</td>
                 <td>{{ e.fecha_registro.strftime('%d/%m/%Y') if e.fecha_registro else '—' }}</td>
                 <td style="white-space:nowrap;">
+                    {% if not es_sub %}
+                    <!-- Solo las entidades principales pueden tener sub-entidades -->
+                    <button class="btn-accion btn-sub" onclick="agregarSubentidad({{ e.id }})" title="Agregar sub-entidad">
+                        <i class="bi bi-diagram-3-fill"></i>
+                    </button>
+                    {% endif %}
                     <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ e.id }})" title="Editar">
                         <i class="bi bi-pencil-fill"></i>
                     </button>
@@ -386,29 +455,39 @@
     </table>
     {% else %}
     <div class="empty-state">
+        {% if es_sub %}
+        <i class="bi bi-diagram-3"></i>
+        <p>No hay sub-entidades registradas aún.</p>
+        <button class="btn-primary-act" onclick="abrirModalNuevo()" style="margin-top:16px;">
+            + CREAR PRIMERA SUB-ENTIDAD
+        </button>
+        {% else %}
         <i class="bi bi-buildings"></i>
         <p>No hay entidades registradas aún.</p>
         <button class="btn-primary-act" onclick="abrirModalNuevo()" style="margin-top:16px;">
             + CREAR PRIMERA ENTIDAD
         </button>
+        {% endif %}
     </div>
     {% endif %}
 </div>
 
 <!-- ═══════════ TARJETAS ═══════════ -->
 <div class="cards-container" id="cardsContainer">
-    {% if entidades %}
+    {% if lista %}
     <div class="ent-grid" id="entGrid">
-        {% for e in entidades %}
+        {% for e in lista %}
         <div class="ent-card"
              data-razon="{{ e.razon_social | lower }}"
-             data-nit="{{ e.nit_cif | lower }}">
+             data-nit="{{ e.nit_cif | lower }}"
+             data-ancestros=",{{ e.ruta_ids[:-1] | join(',') }},">
             {% if e.logo_path %}
                 <img src="/static/{{ e.logo_path }}" class="ent-card-logo" alt="logo">
             {% else %}
                 <div class="ent-card-logo-ph"><i class="bi bi-building"></i></div>
             {% endif %}
             <div class="ent-card-name">{{ e.razon_social }}</div>
+            {% if e.nombre_padre %}<span class="badge-sub"><i class="bi bi-diagram-3"></i> {{ e.nombre_padre }}</span>{% endif %}
             <div class="ent-card-meta">
                 <span><i class="bi bi-upc-scan"></i> {{ e.nit_cif }}</span>
                 <span><i class="bi bi-geo-alt-fill"></i> {{ e.ciudad or '—' }}</span>
@@ -416,6 +495,11 @@
                 <span><i class="bi bi-calendar3"></i> {{ e.fecha_registro.strftime('%d/%m/%Y') if e.fecha_registro else '—' }}</span>
             </div>
             <div class="ent-card-actions">
+                {% if not es_sub %}
+                <button class="btn-accion btn-sub" onclick="agregarSubentidad({{ e.id }})" title="Agregar sub-entidad">
+                    <i class="bi bi-diagram-3-fill"></i>
+                </button>
+                {% endif %}
                 <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ e.id }})" title="Editar">
                     <i class="bi bi-pencil-fill"></i>
                 </button>
@@ -429,7 +513,7 @@
     {% else %}
     <div class="empty-state">
         <i class="bi bi-buildings"></i>
-        <p>No hay entidades registradas aún.</p>
+        <p>{{ 'No hay sub-entidades registradas aún.' if es_sub else 'No hay entidades registradas aún.' }}</p>
     </div>
     {% endif %}
 </div>
@@ -437,6 +521,8 @@
 <!-- Form oculto para eliminar (evita GET con datos sensibles) -->
 <form id="formEliminar" method="POST" style="display:none;">
     <input type="hidden" name="confirmar" value="1">
+    <!-- Volver: a qué módulo regresar después de eliminar -->
+    <input type="hidden" name="Volver" value="{{ 'subentidades' if es_sub else 'entidades' }}">
 </form>
 
 <!-- ═══════════ MODAL CREAR / EDITAR ═══════════ -->
@@ -449,6 +535,22 @@
 
         <form id="formEntidad" method="POST" enctype="multipart/form-data">
             <p class="req-note"><span class="req">*</span> Campos obligatorios</p>
+            <!-- Volver: a qué módulo regresar después de guardar -->
+            <input type="hidden" name="Volver" value="{{ 'subentidades' if es_sub else 'entidades' }}">
+
+            {% if es_sub %}
+            <!-- ── Paso 1: elegir la entidad de la que depende (obligatorio) ─── -->
+            <div class="paso-padre">
+                <label class="lbl" for="fPadre">Entidad principal <span class="req">*</span></label>
+                <!-- Solo entidades principales: una sub-entidad no puede tener sub-entidades -->
+                <select name="IdEntidadPadre" id="fPadre" class="finput" required onchange="actualizarSubtitulo()">
+                    <option value="">— Seleccione la entidad —</option>
+                    {% for p in entidades if p.nivel == 0 %}
+                    <option value="{{ p.id }}">{{ p.razon_social }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
 
             <!-- ── Sección superior: logo | campos principales ─── -->
             <div class="modal-top">
@@ -515,6 +617,18 @@
                 </div>
             </div>
 
+            <!-- ── Sección inferior: correo administrativo ─── -->
+            <div class="modal-bottom">
+                <div class="col-full">
+                    <label class="lbl">Correo administrativo</label>
+                    <input type="email" name="EmailEntidad" id="fEmail" class="finput"
+                           placeholder="admin@entidad.gov.co">
+                    <p class="req-note" style="margin:6px 0 0;">
+                        Opcional. Al crear la entidad se le envía un correo para que verifique sus datos.
+                    </p>
+                </div>
+            </div>
+
             <!-- ── Footer con botón centrado ─────────────────────── -->
             <div class="modal-footer">
                 <button type="submit" class="btn-guardar" id="btnGuardar">Guardar Entidad</button>
@@ -534,7 +648,9 @@ const ENTIDADES = {
         pais:   {{ (e.pais   or 'CO')      | tojson }},
         ciudad: {{ (e.ciudad or '')         | tojson }},
         dir:    {{ (e.direccion or '')      | tojson }},
-        tel:    {{ (e.telefono or '')       | tojson }}
+        tel:    {{ (e.telefono or '')       | tojson }},
+        email:  {{ (e.email or '')          | tojson }},
+        padre:  {{ e.id_entidad_padre       | tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 };
@@ -543,17 +659,45 @@ const ENTIDADES = {
 <script>
     const overlay = document.getElementById('modalOverlay');
 
-    /* ── Abrir modal vacío (crear) ───────────────────────── */
-    function abrirModalNuevo() {
-        document.getElementById('modalTitulo').innerHTML = 'Nueva <span style="color:var(--primary)">Entidad</span>';
+    /* true en el módulo Sub-entidades (/subentidades), false en Entidades */
+    const ES_SUB = {{ 'true' if es_sub else 'false' }};
+    const NOMBRE = ES_SUB ? 'Sub-entidad' : 'Entidad';
+
+    /* El select de entidad principal solo existe en el módulo Sub-entidades */
+    const selPadre = document.getElementById('fPadre');
+
+    /* Subtítulo del formulario: muestra de qué entidad dependerá la sub-entidad */
+    function actualizarSubtitulo() {
+        if (!ES_SUB) return;
+        const padre = ENTIDADES[parseInt(selPadre.value, 10)];
+        document.getElementById('modalSub').textContent = padre
+            ? `Dependiente de ${padre.razon}`
+            : 'Primero seleccione la entidad principal';
+    }
+
+    /* Botón "Agregar sub-entidad" (solo en Entidades): lleva al módulo
+       Sub-entidades con esa entidad principal ya elegida. */
+    function agregarSubentidad(idPadre) {
+        window.location.href = `/subentidades?padre=${idPadre}`;
+    }
+
+    /* ── Abrir modal vacío (crear). En Sub-entidades puede llegar idPadre ya elegido ── */
+    function abrirModalNuevo(idPadre = null) {
+        document.getElementById('modalTitulo').innerHTML = `Nueva <span style="color:var(--primary)">${NOMBRE}</span>`;
         document.getElementById('modalSub').textContent  = 'Registro de entidad de seguridad';
         document.getElementById('formEntidad').action    = '/RegistroEntidad';
-        document.getElementById('btnGuardar').textContent = 'Guardar Entidad';
+        document.getElementById('btnGuardar').textContent = `Guardar ${NOMBRE}`;
         document.getElementById('formEntidad').reset();
         document.getElementById('phonePrefijo').textContent = '+57';
+        if (selPadre) {
+            selPadre.value = idPadre || '';
+            actualizarSubtitulo();
+        }
         resetLogoPreview();
         overlay.classList.add('open');
         cargarCiudades();
+        // Si aún no hay entidad principal, el cursor queda en ese campo (es el primer paso)
+        if (selPadre && !selPadre.value) selPadre.focus();
     }
 
     /* ── Abrir modal relleno (editar) — recibe solo el id ── */
@@ -561,7 +705,7 @@ const ENTIDADES = {
         const d = ENTIDADES[id];
         if (!d) return;
 
-        document.getElementById('modalTitulo').innerHTML = 'Editar <span style="color:var(--primary)">Entidad</span>';
+        document.getElementById('modalTitulo').innerHTML = `Editar <span style="color:var(--primary)">${NOMBRE}</span>`;
         document.getElementById('modalSub').textContent  = 'Actualizar información de la entidad';
         document.getElementById('formEntidad').action    = `/entidades/${id}/editar`;
         document.getElementById('btnGuardar').textContent = 'Guardar Cambios';
@@ -570,6 +714,8 @@ const ENTIDADES = {
         document.getElementById('fNit').value       = d.nit;
         document.getElementById('fCiudad').value    = d.ciudad;
         document.getElementById('fDireccion').value = d.dir;
+        document.getElementById('fEmail').value     = d.email;
+        if (selPadre) selPadre.value = d.padre || '';
 
         document.getElementById('phonePrefijo').textContent = '+57';
         const telInput = document.getElementById('fTelefono');
@@ -638,18 +784,26 @@ const ENTIDADES = {
     /* ── Filtrar tabla y tarjetas de entidades ──────────── */
     function filtrarEntidades() {
         const texto = (document.getElementById('filtroTexto').value || '').toLowerCase().trim();
+        // Filtro por entidad principal (solo existe en Sub-entidades)
+        const selPrincipal = document.getElementById('filtroPrincipal');
+        const principal = selPrincipal ? selPrincipal.value : '';
+
+        // Un elemento pasa si coincide el texto y, si se eligió entidad principal,
+        // esa entidad está entre sus ancestros (data-ancestros = ",1,5,")
+        const coincide = el =>
+            (!texto || (el.dataset.razon||'').includes(texto) || (el.dataset.nit||'').includes(texto))
+            && (!principal || (el.dataset.ancestros||'').includes(`,${principal},`));
 
         const rows = document.querySelectorAll('#tablaEntBody tr');
         let visible = 0;
         rows.forEach(row => {
-            const ok = (!texto || (row.dataset.razon||'').includes(texto) || (row.dataset.nit||'').includes(texto));
+            const ok = coincide(row);
             row.style.display = ok ? '' : 'none';
             if (ok) visible++;
         });
 
         document.querySelectorAll('#entGrid .ent-card').forEach(card => {
-            const ok = (!texto || (card.dataset.razon||'').includes(texto) || (card.dataset.nit||'').includes(texto));
-            card.style.display = ok ? '' : 'none';
+            card.style.display = coincide(card) ? '' : 'none';
         });
 
         const el = document.getElementById('filtroResultados');
@@ -661,6 +815,8 @@ const ENTIDADES = {
     function limpiarFiltrosEntidades() {
         const el = document.getElementById('filtroTexto');
         if (el) el.value = '';
+        const selPrincipal = document.getElementById('filtroPrincipal');
+        if (selPrincipal) selPrincipal.value = '';
         filtrarEntidades();
     }
 
@@ -689,12 +845,46 @@ const ENTIDADES = {
         let v = 'tabla';
         try { v = localStorage.getItem('ent_vista') || 'tabla'; } catch {}
         setVistaEnt(v);
+
+        {% if flash %}
+        // Mensaje de éxito que dejó el servidor después de crear / editar / eliminar
+        // (tojson escapa el texto, así un nombre con comillas no rompe el JavaScript)
+        Swal.fire({
+            icon: 'success',
+            iconColor: '#22c55e',
+            title: {{ flash.titulo | tojson }},
+            text:  {{ flash.texto  | tojson }},
+            confirmButtonText:  'Aceptar',
+            confirmButtonColor: '#b8860b',
+            timer: 4000,             // se cierra solo a los 4 segundos
+            timerProgressBar: true,
+            customClass: { popup: 'swal-popup-custom' }
+        });
+        {% endif %}
+
+        {% if abrir_padre %}
+        // Se llegó desde el botón "Agregar sub-entidad" de Entidades (?padre=ID):
+        // abre el formulario con esa entidad principal ya seleccionada.
+        abrirModalNuevo({{ abrir_padre | int }});
+        {% endif %}
     });
 
     /* ── Confirmar eliminación con SweetAlert2 ───────────── */
     function confirmarEliminar(id) {
         const d = ENTIDADES[id];
         if (!d) return;
+        // Si tiene sub-entidades no se puede eliminar (el servidor también lo valida)
+        const hijas = Object.values(ENTIDADES).filter(x => x.padre === id).map(x => x.razon);
+        if (hijas.length) {
+            Swal.fire({
+                title: 'No se puede eliminar',
+                html: `<strong>${d.razon}</strong> tiene sub-entidades activas:<br>${hijas.join('<br>')}<br><br>`
+                    + '<span style="font-size:13px;color:#6b7280">Elimínelas o cámbielas de entidad primero.</span>',
+                icon: 'info', confirmButtonColor: '#b8860b',
+                customClass: { popup: 'swal-popup-custom' }
+            });
+            return;
+        }
         Swal.fire({
             title: '¿Eliminar entidad?',
             html:  `Vas a eliminar <strong>${d.razon}</strong>.<br><span style="font-size:13px;color:#6b7280">Esta acción no se puede deshacer.</span>`,

@@ -281,7 +281,8 @@
 
             {% if session.rol == 'super_admin' %}
                 <a href="/entidades"         class="nav-item {% if request.url.path == '/entidades' %}active{% endif %}"><i class="bi bi-buildings-fill"></i> ENTIDADES</a>
-                <a href="/usuarios"          class="nav-item {% if request.url.path == '/usuarios' %}active{% endif %}"><i class="bi bi-people-fill"></i> USUARIOS</a>
+                <a href="/subentidades"      class="nav-item {% if request.url.path == '/subentidades' %}active{% endif %}"><i class="bi bi-diagram-3-fill"></i> SUB-ENTIDADES</a>
+                <a href="/usuarios"         class="nav-item {% if request.url.path == '/usuarios' %}active{% endif %}"><i class="bi bi-people-fill"></i> USUARIOS</a>
                 <a href="/gestion-guias"     class="nav-item {% if request.url.path == '/gestion-guias' %}active{% endif %}"><i class="bi bi-person-badge-fill"></i> GUÍAS K9</a>
                 <a href="/caninos"           class="nav-item {% if request.url.path == '/caninos' %}active{% endif %}"><i class="bi bi-shield-fill"></i> CANINOS K9</a>
                 <a href="/salud-canina"      class="nav-item {% if request.url.path == '/salud-canina' %}active{% endif %}"><i class="bi bi-heart-pulse-fill"></i> SALUD CANINA</a>

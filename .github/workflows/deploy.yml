@@ -1,0 +1,43 @@
+# =====================================================================
+#  DESPLIEGUE AUTOMÁTICO DE CANGUARD K9
+#  Cada vez que algo llega a la rama main (merge release -> main),
+#  GitHub le pide al runner del servidor EC2 que actualice la app.
+# =====================================================================
+name: Desplegar a produccion
+
+on:
+  push:
+    branches: [main]        # se dispara solo con cambios en main (producción)
+  workflow_dispatch:        # botón "Run workflow" en la pestaña Actions, para lanzarlo a mano
+
+# Si llegan dos merges seguidos, no corre dos despliegues al mismo tiempo
+concurrency:
+  group: despliegue-produccion
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    runs-on: self-hosted    # lo ejecuta el runner "canguard-produccion" del EC2
+    steps:
+      - name: Bajar el codigo nuevo de main
+        run: |
+          cd /home/ubuntu/Canguard
+          git pull origin main
+
+      - name: Instalar o actualizar librerias de Python
+        run: |
+          cd /home/ubuntu/Canguard/backend
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Actualizar la base de datos (agrega lo nuevo, no borra datos)
+        run: |
+          cd /home/ubuntu/Canguard/backend
+          ./venv/bin/python -c "import psycopg, os; from dotenv import load_dotenv; load_dotenv('.env'); c = psycopg.connect(host=os.getenv('DB_HOST'), port=os.getenv('DB_PORT', '5432'), user=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'), dbname=os.getenv('DB_NAME'), autocommit=True); c.execute(open('db/CanGuardK9.sql', encoding='utf-8').read()); c.close(); print('Base de datos al dia')"
+
+      - name: Reiniciar la app para que tome los cambios
+        run: sudo systemctl restart canguard
+
+      - name: Verificar que la app quedo funcionando
+        run: |
+          sleep 3
+          systemctl is-active canguard

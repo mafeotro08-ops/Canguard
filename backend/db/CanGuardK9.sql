@@ -678,6 +678,12 @@ CREATE INDEX IF NOT EXISTS IxRegistroDocCanino  ON RegistroDocumental (IdCanino,
 CREATE INDEX IF NOT EXISTS IxRegistroDocSesion  ON RegistroDocumental (IdSesion);
 CREATE INDEX IF NOT EXISTS IxRegistroDocEntidad ON RegistroDocumental (IdEntidad, FechaHora);
 
+-- Retención de videos: para ahorrar espacio en disco, los videos/audios se
+-- borran automáticamente pasado un tiempo (script limpiar_videos.py), pero la
+-- fila y la transcripción se conservan. ArchivoEliminadoEn guarda cuándo se
+-- borró el archivo; NULL = el archivo sigue disponible.
+ALTER TABLE RegistroDocumental ADD COLUMN IF NOT EXISTS ArchivoEliminadoEn TIMESTAMP NULL;
+
 -- NULLS NOT DISTINCT: las etiquetas globales (IdEntidad NULL) tampoco se
 -- pueden repetir, así los datos semilla no se duplican al re-ejecutar el script.
 CREATE TABLE IF NOT EXISTS Etiqueta (

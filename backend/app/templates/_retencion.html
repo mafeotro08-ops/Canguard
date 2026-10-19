@@ -1,0 +1,41 @@
+{#
+  Piezas reutilizables para la retención de videos (ver limpiar_videos.py).
+  Se importan así:
+      {% from "_retencion.html" import badge_retencion, preview_eliminado, estilos_retencion %}
+  y se llama {{ estilos_retencion() }} una vez en la página.
+
+  arch necesita: tipo, created_at, archivo_eliminado_en, notas
+  RETENCION_DIAS y timedelta vienen de templates.env.globals (main.py)
+#}
+
+{# Etiqueta pequeña: "Disponible hasta dd/mm/aaaa" o "Video eliminado el ..." #}
+{% macro badge_retencion(arch) -%}
+{% if arch.archivo_eliminado_en %}
+<span class="ret-badge ret-eliminado" title="El archivo se borró para ahorrar espacio; la transcripción y el documento siguen disponibles">
+    <i class="bi bi-archive-fill"></i> Archivo eliminado el {{ arch.archivo_eliminado_en.strftime('%d/%m/%Y') }} · transcripción disponible
+</span>
+{% elif arch.tipo in ('video', 'audio') and arch.created_at %}
+<span class="ret-badge" title="Pasados {{ RETENCION_DIAS }} días el archivo se borra; la transcripción se conserva{% if not arch.notas %}. Mientras no tenga transcripción, NO se borra{% endif %}">
+    <i class="bi bi-hourglass-split"></i>
+    {% if arch.notas %}Disponible hasta {{ (arch.created_at + timedelta(days=RETENCION_DIAS)).strftime('%d/%m/%Y') }}{% else %}Sin transcripción: no se borrará{% endif %}
+</span>
+{% endif %}
+{%- endmacro %}
+
+{# Estilos de la etiqueta: se incluyen UNA vez por página #}
+{% macro estilos_retencion() -%}
+<style>
+    .ret-badge { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600;
+                 padding:2px 8px; border-radius:20px; background:rgba(184,134,11,.12); color:#8a6508; }
+    .ret-badge.ret-eliminado { background:var(--surface-2); color:var(--text-muted); }
+</style>
+{%- endmacro %}
+
+{# Reemplaza la vista previa del video cuando el archivo ya fue borrado #}
+{% macro preview_eliminado() -%}
+<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+            width:100%; height:100%; min-height:60px; color:var(--text-muted); text-align:center;">
+    <i class="bi bi-archive" style="font-size:28px;"></i>
+    <span style="font-size:10px; font-weight:600;">Video no disponible</span>
+</div>
+{%- endmacro %}

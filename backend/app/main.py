@@ -10,7 +10,6 @@ import re
 import shutil
 import secrets
 import hashlib
-from email.utils import parseaddr
 
 try:
     from dotenv import load_dotenv
@@ -34,7 +33,7 @@ from .models import (
     get_all_programas, get_programa_by_clave, create_programa, update_programa, delete_programa,
     get_sesion_by_id, get_vision_archivos, create_vision_archivo, delete_vision_archivo,
     get_all_vision_archivos,
-    update_sesion_curso,
+    update_sesion_curso, marcar_sesion_en_proceso,
     get_user_by_username_o_email, crear_token_recuperacion,
     get_token_recuperacion_valido, usar_token_recuperacion,
 )
@@ -61,6 +60,10 @@ app.add_middleware(
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, 'templates'))
+# Días que se guardan los videos antes de que limpiar_videos.py los borre
+# (las plantillas lo usan para mostrar "disponible hasta ...").
+templates.env.globals['RETENCION_DIAS'] = int(os.getenv('VIDEO_RETENCION_DIAS', '30'))
+templates.env.globals['timedelta'] = timedelta
 
 static_path = os.path.join(BASE_DIR, 'static')
 if not os.path.exists(static_path):
@@ -361,9 +364,6 @@ def _avisar_entidad_creada(request: Request, id_ent: int):
         'razon_social': ent['razon_social'], 'nit_cif': ent['nit_cif'],
         'ciudad': ent['ciudad'], 'direccion': ent['direccion'], 'telefono': ent['telefono'],
         'nombre_padre': padre['razon_social'] if padre else None,
-        # A quién escribir si los datos están mal: CONTACTO_ADMIN del .env, o el remitente.
-        # parseaddr deja solo la dirección: 'CanGuard K9 <x@y.com>' -> 'x@y.com'.
-        'contacto': parseaddr(os.getenv('CONTACTO_ADMIN') or os.getenv('SMTP_FROM') or '')[1],
         'app_url': os.getenv('APP_URL', str(request.base_url)).rstrip('/'),
     }
     html = templates.get_template('emails/entidad_creada.html').render(**datos)
@@ -381,8 +381,7 @@ def _avisar_entidad_creada(request: Request, id_ent: int):
         f"  Dirección: {datos['direccion'] or '—'}",
         f"  Teléfono: {datos['telefono'] or '—'}",
         "",
-        "Si algún dato no es correcto, contacte al administrador de CanGuard"
-        + (f": {datos['contacto']}" if datos['contacto'] else "."),
+        "Si algún dato no es correcto, contacte al administrador de CanGuard.",
     ]
     enviar_correo(ent['email'], 'Su entidad fue registrada · CanGuard K9', '\n'.join(lineas), html)
 
@@ -1320,13 +1319,18 @@ async def vision_page(request: Request, esp: str, id_ses: int):
     flash_ok = request.session.get('flash_vision_ok')
     if flash_ok:
         del request.session['flash_vision_ok']
-    openai_ok = bool(os.getenv('OPENAI_API_KEY', ''))
+    openai_ok = bool(os.getenv('GROQ_API_KEY', ''))   # ¿está configurada la IA de transcripción (Groq)?
     fresh  = bool(request.query_params.get('fresh'))
     review = bool(request.query_params.get('review'))
     return templates.TemplateResponse('cursos_vision.html', ctx(
         request, sesion=sesion, curso=curso, archivos=archivos,
         flash_ok=flash_ok, openai_ok=openai_ok, fresh=fresh, review=review,
     ))
+
+
+# Extensiones permitidas en la carga de visión (videos y audios que Groq puede transcribir)
+EXT_VIDEO = {'.mp4', '.mov', '.avi', '.webm', '.mkv'}
+EXT_AUDIO = {'.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac'}
 
 
 @app.post('/cursos/{esp}/sesiones/{id_ses}/vision')
@@ -1341,8 +1345,16 @@ async def vision_upload(
     if r:
         return r
     import time as _time
-    ext     = os.path.splitext(archivo.filename)[1].lower()
-    tipo    = 'video' if ext in ('.mp4', '.mov', '.avi', '.webm', '.ogg', '.m4a', '.mp3', '.wav') else 'imagen'
+    ext = os.path.splitext(archivo.filename)[1].lower()
+    # Solo se aceptan videos y audios (lo que se puede transcribir); las imágenes no.
+    if ext in EXT_VIDEO:
+        tipo = 'video'
+    elif ext in EXT_AUDIO:
+        tipo = 'audio'
+    else:
+        request.session['flash_vision_ok'] = ('ERROR: solo se permiten videos o audios '
+                                              f'({", ".join(sorted(EXT_VIDEO | EXT_AUDIO))}).')
+        return RedirectResponse(f'/cursos/{esp}/sesiones/{id_ses}/vision', status_code=303)
     carpeta = os.path.join(BASE_DIR, 'static', 'vision', str(id_ses))
     os.makedirs(carpeta, exist_ok=True)
     fname     = f'{int(_time.time())}{ext}'
@@ -1351,73 +1363,38 @@ async def vision_upload(
         shutil.copyfileobj(archivo.file, f)
 
     transcripcion = notas or ''
+    aviso = ''
     if tipo in ('video', 'audio'):
-        api_key = os.getenv('OPENAI_API_KEY', '')
-        if api_key:
-            try:
-                from openai import OpenAI as _OAI
-                with open(ruta_disk, 'rb') as af:
-                    tr = _OAI(api_key=api_key).audio.transcriptions.create(
-                        model='whisper-1', file=af, language='es')
-                transcripcion = tr.text
-            except Exception:
-                try:
-                    transcripcion = _transcribir_local(ruta_disk)
-                except Exception:
-                    pass
-        else:
-            try:
-                transcripcion = _transcribir_local(ruta_disk)
-            except Exception:
-                pass
+        try:
+            transcripcion = _transcribir_audio(ruta_disk)
+        except Exception as e:
+            # El archivo se guarda igual; la transcripción se puede reintentar luego
+            aviso = f' No se pudo transcribir: {e}'
 
     create_vision_archivo(id_ses, f'vision/{id_ses}/{fname}', tipo, transcripcion or None)
-    request.session['flash_vision_ok'] = 'Archivo cargado y transcrito correctamente.' if transcripcion else 'Archivo cargado.'
+    # Si la sesión todavía estaba "Sin definir", al subir evidencia pasa a "En proceso".
+    # Si ya estaba Aprobado/Reprobado no se toca, para no borrar una evaluación hecha.
+    marcar_sesion_en_proceso(id_ses)
+    request.session['flash_vision_ok'] = ('Archivo cargado y transcrito correctamente.' if transcripcion
+                                          else 'Archivo cargado.' + aviso)
     return RedirectResponse(f'/cursos/{esp}/sesiones/{id_ses}/vision?review=1', status_code=303)
 
 
-def _transcribir_local(ruta: str) -> str:
-    """Transcribe usando Whisper local.
-    Extrae el audio con imageio_ffmpeg directamente (sin depender del PATH)
-    y pasa el array numpy a Whisper, evitando su load_audio interno."""
-    import tempfile, subprocess, wave
-    import numpy as np
-    import whisper as _whisper
+def _transcribir_audio(ruta: str) -> str:
+    """Transcribe un audio o video con Groq (plan gratuito, en la nube).
 
-    # Obtener ffmpeg embebido en el venv (no el del PATH del sistema)
-    try:
-        import imageio_ffmpeg
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        ffmpeg_exe = 'ffmpeg'
-
-    tmp_fd, tmp_wav = tempfile.mkstemp(suffix='.wav')
-    os.close(tmp_fd)
-    try:
-        # Extraer audio a WAV mono 16kHz
-        cmd = [
-            ffmpeg_exe, '-y', '-i', ruta,
-            '-ar', '16000', '-ac', '1', '-f', 'wav',
-            tmp_wav, '-loglevel', 'error'
-        ]
-        proc = subprocess.run(cmd, capture_output=True, timeout=300)
-        if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.decode('utf-8', errors='replace') or 'Error extrayendo audio con ffmpeg')
-
-        # Leer WAV como numpy float32 (Whisper acepta arrays directamente)
-        with wave.open(tmp_wav, 'rb') as wf:
-            raw = wf.readframes(wf.getnframes())
-        audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-
-        model = _whisper.load_model('base')
-        result = model.transcribe(audio, language='es', fp16=False)
-        return result['text']
-    finally:
-        if os.path.exists(tmp_wav):
-            try:
-                os.remove(tmp_wav)
-            except Exception:
-                pass
+    Groq es compatible con la API de OpenAI, por eso se usa la misma librería
+    'openai' cambiando solo la dirección (base_url) y el modelo.
+    Necesita GROQ_API_KEY en el .env. Acepta archivos de hasta 25 MB."""
+    api_key = os.getenv('GROQ_API_KEY', '')
+    if not api_key:
+        raise RuntimeError('configure GROQ_API_KEY en el archivo .env para usar la transcripción.')
+    from openai import OpenAI
+    cliente = OpenAI(api_key=api_key, base_url='https://api.groq.com/openai/v1')
+    with open(ruta, 'rb') as f:
+        tr = cliente.audio.transcriptions.create(
+            model='whisper-large-v3', file=f, language='es')
+    return tr.text
 
 
 @app.post('/vision/{id_arch}/transcribir-ajax')
@@ -1433,47 +1410,37 @@ async def transcribir_ajax(request: Request, id_arch: int):
     if not arch:
         return JSONResponse({'ok': False, 'error': 'Archivo no encontrado'})
     ruta = os.path.join(BASE_DIR, 'static', arch['archivo_path'].replace('/', os.sep))
-    texto = None
-    api_error = None
-
-    # Intento 1: OpenAI API (si hay clave configurada)
-    api_key = os.getenv('OPENAI_API_KEY', '')
-    if api_key:
-        try:
-            from openai import OpenAI as _OAI
-            with open(ruta, 'rb') as f:
-                tr = _OAI(api_key=api_key).audio.transcriptions.create(
-                    model='whisper-1', file=f, language='es')
-            texto = tr.text
-        except Exception as e:
-            api_error = str(e)
-
-    # Intento 2: Whisper local (fallback gratuito)
-    if texto is None:
-        try:
-            texto = _transcribir_local(ruta)
-        except Exception as e2:
-            msg = api_error or ''
-            if msg:
-                msg += ' | '
-            msg += 'Whisper local: ' + str(e2)
-            return JSONResponse({'ok': False, 'error': msg})
+    try:
+        texto = _transcribir_audio(ruta)
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e)})
 
     _mq("UPDATE RegistroDocumental SET Transcripcion=%s WHERE IdRegistroDocumental=%s", (texto, id_arch), write=True)
     return JSONResponse({'ok': True, 'texto': texto})
 
 
 @app.post('/vision/{id_arch}/notas')
-async def vision_guardar_notas(request: Request, id_arch: int, texto: str = Form('')):
+async def vision_guardar_notas(request: Request, id_arch: int, texto: str = Form(''),
+                               mantener: str = Form('')):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
     from .models import _query as _mq
     _mq("UPDATE RegistroDocumental SET Transcripcion=%s WHERE IdRegistroDocumental=%s", (texto or None, id_arch), write=True)
-    request.session['flash_vision_ok'] = 'Transcripción guardada.'
-    referer = request.headers.get('referer', '/cursos')
-    sep = '&' if '?' in referer else '?'
-    return RedirectResponse(referer + sep + 'fresh=1', status_code=303)
+    # Se vuelve a la página de la sesión SIN parámetros (?review=1...): así el cuadro
+    # de transcripción queda vacío y listo para el siguiente archivo. La dirección se
+    # arma desde la base de datos, no desde el referer que manda el navegador.
+    ses = _mq("""SELECT s.Especialidad AS especialidad, s.IdSesion AS id_sesion
+                   FROM RegistroDocumental rd JOIN Sesion s ON rd.IdSesion = s.IdSesion
+                  WHERE rd.IdRegistroDocumental = %s""", (id_arch,), one=True)
+    ruta = f"/cursos/{ses['especialidad']}/sesiones/{ses['id_sesion']}/vision" if ses else '/cursos'
+    if mantener:
+        # Guardado automático justo después de transcribir: el texto se deja a la
+        # vista (review=1) para que la persona lo revise y lo corrija.
+        request.session['flash_vision_ok'] = 'Transcripción lista. Revísala y dale Guardar.'
+        return RedirectResponse(ruta + '?review=1', status_code=303)
+    request.session['flash_vision_ok'] = 'Transcripción guardada. Ya puedes subir el siguiente archivo.'
+    return RedirectResponse(ruta + '?fresh=1', status_code=303)
 
 
 @app.post('/vision/{id_arch}/eliminar')
@@ -1504,11 +1471,6 @@ async def transcribir_vision(request: Request, esp: str, id_ses: int,
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
-    api_key = os.getenv('OPENAI_API_KEY', '')
-    if not api_key:
-        request.session['flash_vision_ok'] = 'ERROR: Configura OPENAI_API_KEY en el archivo .env para usar la transcripción.'
-        return RedirectResponse(f'/cursos/{esp}/sesiones/{id_ses}/vision', status_code=303)
-
     from .models import _query as _mq
     arch = _mq(
         "SELECT ArchivoPath AS archivo_path FROM RegistroDocumental WHERE IdRegistroDocumental=%s",
@@ -1519,15 +1481,7 @@ async def transcribir_vision(request: Request, esp: str, id_ses: int,
 
     ruta_archivo = os.path.join(BASE_DIR, 'static', arch['archivo_path'].replace('/', os.sep))
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        with open(ruta_archivo, 'rb') as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model='whisper-1',
-                file=audio_file,
-                language='es',
-            )
-        texto = transcript.text
+        texto = _transcribir_audio(ruta_archivo)
     except Exception as exc:
         request.session['flash_vision_ok'] = f'Error en transcripción: {exc}'
         return RedirectResponse(f'/cursos/{esp}/sesiones/{id_ses}/vision', status_code=303)

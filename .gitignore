@@ -28,3 +28,6 @@ backend/app/static/vision/*
 !backend/app/static/vision/.gitkeep
 backend/app/static/programas/*
 !backend/app/static/programas/.gitkeep
+
+# Documentos que suben los usuarios (historiales clínicos, cartas de baja): nunca al repositorio
+backend/app/static/docs/

@@ -1,6 +1,8 @@
 {% extends "layout.html" %}
+{% from "_retencion.html" import badge_retencion, preview_eliminado, estilos_retencion %}
 
 {% block contenido %}
+{{ estilos_retencion() }}
 <style>
     /* ── Encabezado ── */
     .va-page-header { margin-bottom: 28px; }
@@ -171,7 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
      data-prog="{{ arch.nombre_programa or '' }}"
      data-texto="{{ ((arch.nombre_canino or '') ~ ' ' ~ (arch.nombre_programa or '') ~ ' ' ~ (arch.notas or '') ~ ' ' ~ (arch.nombre_entidad or '')) | lower }}">
     <div class="va-thumb">
-        {% if arch.tipo == 'imagen' %}
+        {% if arch.archivo_eliminado_en %}
+        {{ preview_eliminado() }}
+        {% elif arch.tipo == 'imagen' %}
         <img src="/static/{{ arch.archivo_path }}" alt="visión" onclick="abrirLightbox(this.src, 'img')">
         {% elif arch.tipo == 'video' %}
         <video src="/static/{{ arch.archivo_path }}" controls muted preload="metadata"></video>
@@ -195,11 +199,14 @@ document.addEventListener('DOMContentLoaded', () => {
             </span>
             {% endif %}
         </div>
+        <div style="margin:4px 0;">{{ badge_retencion(arch) }}</div>
         {% if arch.notas %}<div class="va-notas">{{ arch.notas }}</div>{% endif %}
         <div class="va-actions">
+            {% if not arch.archivo_eliminado_en %}
             <a href="/static/{{ arch.archivo_path }}" target="_blank" class="btn-ver-va">
                 <i class="bi bi-eye-fill"></i> Ver
             </a>
+            {% endif %}
             <a href="/cursos/{{ arch.especialidad }}/sesiones/{{ arch.id_sesion }}/vision" class="btn-ses-va" title="Ir a sesión">
                 <i class="bi bi-box-arrow-up-right"></i>
             </a>
@@ -228,7 +235,9 @@ document.addEventListener('DOMContentLoaded', () => {
      data-prog="{{ arch.nombre_programa or '' }}"
      data-texto="{{ ((arch.nombre_canino or '') ~ ' ' ~ (arch.nombre_programa or '') ~ ' ' ~ (arch.notas or '') ~ ' ' ~ (arch.nombre_entidad or '')) | lower }}">
     <div class="va-row-thumb">
-        {% if arch.tipo == 'imagen' %}
+        {% if arch.archivo_eliminado_en %}
+        <i class="bi bi-archive" style="font-size:22px; color:var(--text-muted);"></i>
+        {% elif arch.tipo == 'imagen' %}
         <img src="/static/{{ arch.archivo_path }}" alt="visión">
         {% elif arch.tipo == 'video' %}
         <video src="/static/{{ arch.archivo_path }}" muted preload="metadata"></video>
@@ -243,12 +252,15 @@ document.addEventListener('DOMContentLoaded', () => {
             <span><i class="bi bi-calendar3"></i> {{ arch.fecha }}</span>
             {% if arch.nombre_entidad %}<span><i class="bi bi-building"></i> {{ arch.nombre_entidad }}</span>{% endif %}
             {% if arch.notas %}<span><i class="bi bi-chat-left-text-fill"></i> {{ arch.notas }}</span>{% endif %}
+            {{ badge_retencion(arch) }}
         </div>
     </div>
     <div class="va-row-actions">
+        {% if not arch.archivo_eliminado_en %}
         <a href="/static/{{ arch.archivo_path }}" target="_blank" class="btn-ver-va" style="padding:6px 12px;">
             <i class="bi bi-eye-fill"></i> Ver
         </a>
+        {% endif %}
         <a href="/cursos/{{ arch.especialidad }}/sesiones/{{ arch.id_sesion }}/vision" class="btn-ses-va" title="Ir a sesión">
             <i class="bi bi-box-arrow-up-right"></i>
         </a>

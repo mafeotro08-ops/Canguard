@@ -76,6 +76,38 @@
     .info-row i { color:var(--primary); font-size:13px; margin-top:1px; flex-shrink:0; }
     .info-row span { color:var(--text-main); word-break:break-word; }
 
+    /* ── Botones para cambiar de vista (igual que en Entidades) ── */
+    .vista-toggle { display:flex; gap:4px; }
+    .btn-vista {
+        width:34px; height:34px; border-radius:7px; font-size:15px;
+        border:1.5px solid var(--border); background:var(--surface-1);
+        color:var(--text-muted); cursor:pointer; transition:.15s;
+        display:inline-flex; align-items:center; justify-content:center;
+    }
+    .btn-vista:hover { border-color:var(--primary); color:var(--primary); }
+    .btn-vista.active { background:var(--primary); border-color:var(--primary); color:#111; }
+
+    /* ── Vista tabla ── */
+    .tabla-card { display:none; background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; overflow-x:auto; box-shadow:var(--card-shadow); }
+    .tabla-card table { width:100%; border-collapse:collapse; }
+    .tabla-card thead { background:var(--surface-2); }
+    .tabla-card th {
+        padding:12px 14px; text-align:left; font-size:10px; font-weight:700;
+        letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted);
+        border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    .tabla-card td { padding:12px 14px; font-size:13px; color:var(--text-main); border-bottom:1px solid var(--surface-3); vertical-align:middle; }
+    .tabla-card tr:last-child td { border-bottom:none; }
+    .tabla-card tbody tr:hover td { background:var(--surface-2); }
+    .tabla-foto { width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); display:block; }
+    .tabla-foto-ph {
+        width:38px; height:38px; border-radius:50%; background:var(--surface-2);
+        border:2px solid var(--card-border); display:flex; align-items:center;
+        justify-content:center; color:var(--text-muted); font-size:16px;
+    }
+    .tabla-user { display:block; font-size:11px; color:var(--primary); font-weight:600; margin-top:2px; }
+    .tabla-card .ent-badge { margin-bottom:0; }
+
     /* Estado vacío */
     .empty-state { text-align:center; padding:70px 20px; color:var(--text-muted); }
     .empty-state i { font-size:52px; margin-bottom:14px; display:block; }
@@ -88,9 +120,20 @@
         <h1><i class="bi bi-person-badge-fill" style="color:var(--primary); margin-right:8px;"></i>GUÍAS K9</h1>
         <div class="sub">Personal operativo canino registrado en la plataforma</div>
     </div>
-    <div style="font-size:13px; color:var(--text-muted);">
-        <i class="bi bi-people-fill" style="color:var(--primary);"></i>
-        <strong style="color:var(--text-main); margin-left:4px;" id="totalCount">{{ guias | length }}</strong> guías encontrados
+    <div style="display:flex; align-items:center; gap:16px;">
+        <div style="font-size:13px; color:var(--text-muted);">
+            <i class="bi bi-people-fill" style="color:var(--primary);"></i>
+            <strong style="color:var(--text-main); margin-left:4px;" id="totalCount">{{ guias | length }}</strong> guías encontrados
+        </div>
+        <!-- Cambiar entre vista de tarjetas y vista de tabla -->
+        <div class="vista-toggle">
+            <button id="btnVistaCards" class="btn-vista active" onclick="setVistaGuias('cards')" title="Vista tarjetas">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+            </button>
+            <button id="btnVistaTbl" class="btn-vista" onclick="setVistaGuias('tabla')" title="Vista tabla">
+                <i class="bi bi-table"></i>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -194,6 +237,55 @@
     {% endfor %}
 </div><!-- /guias-grid -->
 
+<!-- Vista tabla (los mismos guías, otra presentación) -->
+<div class="tabla-card" id="guiasTabla">
+    <table>
+        <thead>
+            <tr>
+                <th>Foto</th>
+                <th>Nombre</th>
+                <th>Entidad</th>
+                <th>Documento</th>
+                <th>Email</th>
+                <th>Teléfono</th>
+                <th>Nacionalidad</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for g in guias %}
+            <tr data-nombre="{{ g.nombre | lower }}"
+                data-doc="{{ g.documento or '' }}"
+                data-entidad="{{ g.id_entidad or '' }}">
+                <td>
+                    {% if g.foto_perfil_path %}
+                    <img src="/static/{{ g.foto_perfil_path }}" alt="Foto" class="tabla-foto">
+                    {% else %}
+                    <div class="tabla-foto-ph"><i class="bi bi-person-fill"></i></div>
+                    {% endif %}
+                </td>
+                <td>
+                    <strong>{{ g.nombre }}</strong>
+                    <span class="tabla-user">@{{ g.nombre_usuario }}</span>
+                </td>
+                <td>
+                    {% if g.nombre_entidad %}
+                    <span class="ent-badge"><i class="bi bi-buildings-fill"></i>{{ g.nombre_entidad }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">Sin entidad</span>
+                    {% endif %}
+                </td>
+                <td style="white-space:nowrap;">
+                    {% if g.tipo_documento %}{{ g.tipo_documento }} · {% endif %}{{ g.documento or '—' }}
+                </td>
+                <td>{{ g.email or '—' }}</td>
+                <td>{{ g.telefono or '—' }}</td>
+                <td>{{ g.nacionalidad or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
 {% else %}
 <!-- Estado vacío -->
 <div class="empty-state">
@@ -216,20 +308,25 @@ function filtrarGuias() {
     const selEnt = document.getElementById('filtroEntidad');
     const entVal = selEnt ? selEnt.value : '';
 
-    const cards = document.querySelectorAll('#guiasGrid .guia-card');
-    let visible = 0;
-
-    cards.forEach(c => {
-        const nombre  = c.dataset.nombre  || '';
-        const doc     = c.dataset.doc     || '';
-        const entidad = c.dataset.entidad || '';
-
+    // ¿Este guía (tarjeta o fila de la tabla) cumple los filtros?
+    const coincide = el => {
+        const nombre  = el.dataset.nombre  || '';
+        const doc     = el.dataset.doc     || '';
+        const entidad = el.dataset.entidad || '';
         const okTxt = !txt    || nombre.includes(txt) || doc.includes(txt);
         const okEnt = !entVal || entidad === entVal;
+        return okTxt && okEnt;
+    };
 
-        const show = okTxt && okEnt;
+    // El filtro se aplica a las dos vistas, así al cambiar de vista se conserva
+    let visible = 0;
+    document.querySelectorAll('#guiasGrid .guia-card').forEach(c => {
+        const show = coincide(c);
         c.style.display = show ? '' : 'none';
         if (show) visible++;
+    });
+    document.querySelectorAll('#guiasTabla tbody tr').forEach(fila => {
+        fila.style.display = coincide(fila) ? '' : 'none';
     });
 
     const el = document.getElementById('filtroResultados');
@@ -244,5 +341,25 @@ function limpiarFiltros() {
     if (selEnt) selEnt.value = '';
     filtrarGuias();
 }
+
+/* ── Cambiar entre vista de tarjetas y vista de tabla ── */
+function setVistaGuias(modo) {
+    const grid  = document.getElementById('guiasGrid');
+    const tabla = document.getElementById('guiasTabla');
+    const esTabla = modo === 'tabla';
+    if (grid)  grid.style.display  = esTabla ? 'none' : '';
+    if (tabla) tabla.style.display = esTabla ? 'block' : 'none';
+    document.getElementById('btnVistaTbl').classList.toggle('active', esTabla);
+    document.getElementById('btnVistaCards').classList.toggle('active', !esTabla);
+    // Recuerda la vista elegida para la próxima vez que se abra la página
+    try { localStorage.setItem('guias_vista', modo); } catch {}
+}
+
+/* Al cargar, se muestra la última vista que eligió el usuario (por defecto, tarjetas) */
+document.addEventListener('DOMContentLoaded', () => {
+    let v = 'cards';
+    try { v = localStorage.getItem('guias_vista') || 'cards'; } catch {}
+    setVistaGuias(v);
+});
 </script>
 {% endblock %}

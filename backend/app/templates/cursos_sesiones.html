@@ -49,7 +49,7 @@
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
     .modal-box { background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25); }
-    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px 14px; border-bottom:1px solid var(--card-border); border-top:4px solid {{ curso.color }}; border-radius:14px 14px 0 0; }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px 14px; border-bottom:1px solid var(--card-border); border-top:4px solid var(--primary); border-radius:14px 14px 0 0; }
     .modal-header h2 { font-size:16px; font-weight:800; color:var(--text-main); }
     .modal-close { background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); transition:.15s; }
     .modal-close:hover { color:#ef4444; }
@@ -66,8 +66,9 @@
 
     .btn-cancel { padding:9px 18px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:13px; cursor:pointer; }
     .btn-cancel:hover { background:var(--surface-2); }
-    .btn-save { padding:9px 22px; border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:700; cursor:pointer; transition:.18s; display:flex; align-items:center; gap:6px; background:{{ curso.color }}; }
-    .btn-save:hover { opacity:.88; }
+    /* Los formularios usan siempre el dorado de CanGuard (no el color del programa) */
+    .btn-save { padding:9px 22px; border:none; border-radius:8px; color:#111; font-size:13px; font-weight:700; cursor:pointer; transition:.18s; display:flex; align-items:center; gap:6px; background:var(--primary); }
+    .btn-save:hover { background:var(--primary-hover); }
 
     @media(max-width:600px) { .form-grid-2 { grid-template-columns:1fr; } }
 </style>
@@ -184,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="modal-overlay" id="modalSesion">
 <div class="modal-box">
     <div class="modal-header">
-        <h2><i class="bi {{ curso.icono }}" style="color:{{ curso.color }};"></i> Registrar Sesión — {{ curso.nombre }}</h2>
+        <h2><i class="bi {{ curso.icono }}" style="color:var(--primary);"></i> Registrar Sesión — {{ curso.nombre }}</h2>
         <button class="modal-close" onclick="cerrarModal()">&#x2715;</button>
     </div>
     <form method="POST" action="/cursos/{{ curso.key }}/sesion">

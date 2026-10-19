@@ -582,6 +582,14 @@ def update_sesion_curso(id_sesion, fecha, resultado, observaciones, instructor):
         write=True
     )
 
+def marcar_sesion_en_proceso(id_sesion: int):
+    """Pasa la sesión a 'en_proceso' solo si todavía estaba 'Sin definir' (NULL o vacío).
+    Si ya tiene un resultado (aprobado / reprobado / en_proceso) no se modifica."""
+    return _query(
+        "UPDATE Sesion SET Resultado='en_proceso' WHERE IdSesion=%s AND COALESCE(Resultado, '') = ''",
+        (id_sesion,), write=True
+    )
+
 def get_sesion_by_id(id_sesion: int):
     rows = _query(f"""
         SELECT {_CAMPOS_SESION}, c.Nombre AS nombre_canino, c.Raza AS raza,
@@ -596,7 +604,8 @@ def get_sesion_by_id(id_sesion: int):
 def get_vision_archivos(id_sesion: int):
     return _query("""
         SELECT IdRegistroDocumental AS id, IdSesion AS id_sesion, ArchivoPath AS archivo_path,
-               TipoArchivo AS tipo, Transcripcion AS notas
+               TipoArchivo AS tipo, Transcripcion AS notas, FechaRegistro AS created_at,
+               ArchivoEliminadoEn AS archivo_eliminado_en
         FROM RegistroDocumental WHERE IdSesion=%s ORDER BY FechaRegistro DESC
     """, (id_sesion,)) or []
 
@@ -624,10 +633,32 @@ def create_vision_archivo(id_sesion: int, archivo_path: str, tipo: str, notas: s
 def delete_vision_archivo(id_arch: int):
     _query("DELETE FROM RegistroDocumental WHERE IdRegistroDocumental=%s", (id_arch,), write=True)
 
+# ─── Retención de videos (ver limpiar_videos.py) ─────────────────────────────
+
+def get_videos_vencidos(dias: int):
+    """Videos y audios con más de 'dias' días que todavía tienen su archivo y
+    YA tienen transcripción. Los que no se pudieron transcribir no se incluyen,
+    para no perder su contenido."""
+    return _query("""
+        SELECT IdRegistroDocumental AS id, ArchivoPath AS archivo_path, FechaRegistro AS created_at
+        FROM RegistroDocumental
+        WHERE TipoArchivo IN ('video', 'audio')
+          AND ArchivoEliminadoEn IS NULL
+          AND FechaRegistro < NOW() - %s * INTERVAL '1 day'
+          AND COALESCE(TRIM(Transcripcion), '') <> ''
+        ORDER BY FechaRegistro
+    """, (dias,)) or []
+
+def marcar_archivo_eliminado(id_arch: int):
+    """Registra que el archivo se borró del disco; la fila y su transcripción se conservan."""
+    _query("UPDATE RegistroDocumental SET ArchivoEliminadoEn = NOW() WHERE IdRegistroDocumental=%s",
+           (id_arch,), write=True)
+
 def get_all_vision_archivos(id_entidad=None):
     """Todos los archivos de visión con contexto de sesión, canino y programa."""
     campos = """rd.IdRegistroDocumental AS id, rd.ArchivoPath AS archivo_path,
-                rd.TipoArchivo AS tipo, rd.Transcripcion AS notas, rd.FechaRegistro AS created_at"""
+                rd.TipoArchivo AS tipo, rd.Transcripcion AS notas, rd.FechaRegistro AS created_at,
+                rd.ArchivoEliminadoEn AS archivo_eliminado_en"""
     if id_entidad:
         sql = f"""
             SELECT {campos},

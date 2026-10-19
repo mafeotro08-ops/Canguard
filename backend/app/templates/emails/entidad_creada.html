@@ -6,7 +6,7 @@
   Igual que recuperacion.html: diseño con <table> y estilos inline,
   porque Gmail/Outlook borran el CSS moderno.
   Variables: razon_social, nit_cif, ciudad, direccion, telefono,
-             nombre_padre (opcional), contacto, app_url
+             nombre_padre (opcional), app_url
 -->
 <head>
     <meta charset="UTF-8">
@@ -89,8 +89,7 @@
                                 style="background-color:#fffbea; border-left:4px solid #FFD700; border-radius:6px;">
                                 <tr>
                                     <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#6b5300;">
-                                        ⚠ Si algún dato no es correcto, contacte al administrador de CanGuard{% if contacto %}:
-                                        <a href="mailto:{{ contacto }}" style="color:#6b5300; font-weight:700;">{{ contacto }}</a>{% else %}.{% endif %}
+                                        ⚠ Si algún dato no es correcto, contacte al administrador de CanGuard.
                                     </td>
                                 </tr>
                             </table>

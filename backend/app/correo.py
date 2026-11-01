@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
-# Envío de correos de la app (por ahora: recuperación de contraseña).
+# Envío de correos de la app (recuperación de contraseña, aviso de cambio de
+# contraseña y creación de entidades).
 #
 # Se configura con variables del .env:
 #   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM

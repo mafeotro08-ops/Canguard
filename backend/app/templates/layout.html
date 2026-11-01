@@ -161,12 +161,27 @@
             font-size: 13px;
             font-weight: 600;
         }
+        /* Rol como etiqueta de color: cada rol se reconoce de un vistazo */
         .sidebar-user .u-role {
-            color: var(--primary);
-            font-size: 10px;
-            letter-spacing: 2px;
-            margin-top: 3px;
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 8px; padding: 4px 12px; border-radius: 20px;
+            font-size: 10px; letter-spacing: 1.5px; font-weight: 700;
+            border: 1px solid transparent;
         }
+        .u-role-super_admin   { background: rgba(255,215,0,.14);  color: #ffd700; border-color: rgba(255,215,0,.5); }
+        .u-role-admin_entidad { background: rgba(59,130,246,.18); color: #93c5fd; border-color: rgba(59,130,246,.5); }
+        .u-role-instructor    { background: rgba(168,85,247,.18); color: #d8b4fe; border-color: rgba(168,85,247,.5); }
+        .u-role-guia_canino   { background: rgba(34,197,94,.18);  color: #86efac; border-color: rgba(34,197,94,.5); }
+        .u-role-veterinario   { background: rgba(244,63,94,.18);  color: #fda4af; border-color: rgba(244,63,94,.5); }
+        .sidebar-user .u-entidad {
+            margin-top: 7px; font-size: 10px; color: rgba(255,255,255,.55); letter-spacing: .5px;
+        }
+        /* Franja superior del mismo color del rol */
+        .sidebar.rol-super_admin   .sidebar-header { border-top: 3px solid #ffd700; }
+        .sidebar.rol-admin_entidad .sidebar-header { border-top: 3px solid #3b82f6; }
+        .sidebar.rol-instructor    .sidebar-header { border-top: 3px solid #a855f7; }
+        .sidebar.rol-guia_canino   .sidebar-header { border-top: 3px solid #22c55e; }
+        .sidebar.rol-veterinario   .sidebar-header { border-top: 3px solid #f43f5e; }
 
         .nav-menu { flex-grow: 1; padding: 14px 0; overflow-y: auto; }
 
@@ -281,29 +296,38 @@
     <!-- Grid animado con perspectiva (detrás del contenido, igual al login) -->
     <div class="bg-grid" aria-hidden="true"></div>
 
-    <aside class="sidebar">
+    <aside class="sidebar rol-{{ session.rol }}">
         <div class="sidebar-header">
             <h2>CAN<span>GUARD</span></h2>
             {% if session.nombre_usuario %}
             <div class="sidebar-user">
                 <div class="u-name">{{ session.nombre_usuario }}</div>
-                <div class="u-role">
-                    {% if session.rol == 'super_admin' %}&#9670; SUPER ADMIN{% else %}&#9670; ADMIN ENTIDAD{% endif %}
+                {# Rol con su color e ícono (auth.NOMBRE_ROL / ICONO_ROL) #}
+                <div class="u-role u-role-{{ session.rol }}">
+                    <i class="bi {{ ICONO_ROL.get(session.rol, 'bi-person-fill') }}"></i> {{ NOMBRE_ROL.get(session.rol, 'USUARIO') }}
                 </div>
+                {% if session.nombre_entidad %}
+                <div class="u-entidad"><i class="bi bi-buildings"></i> {{ session.nombre_entidad }}</div>
+                {% elif session.rol == 'super_admin' %}
+                <div class="u-entidad"><i class="bi bi-globe-americas"></i> Todas las entidades</div>
+                {% endif %}
             </div>
             {% endif %}
         </div>
 
         <nav class="nav-menu">
-            <a href="/index" class="nav-item"><i class="bi bi-speedometer2"></i> DASHBOARD</a>
-
-            {% if session.rol == 'super_admin' %}
+            {# Un solo lugar define los módulos de cada rol: auth.MODULOS. La misma
+               lista restringe las URLs en el servidor, así que menú y permisos
+               nunca se desincronizan. Sin 2FA configurada no se muestra ningún
+               módulo: el middleware igual lo devolvería a Seguridad. #}
+            {% for ruta, etiqueta, icono in (modulos_de(session.rol) if session.totp_activo else []) %}
+                {% if ruta == '/entidades' %}
                 {# Entidades con su submenú: el texto lleva a /entidades y la flechita
                    despliega Sub-entidades. Si estás en alguna de las dos páginas, arranca abierto. #}
                 {% set en_entidades = request.url.path in ['/entidades', '/subentidades'] %}
                 <div class="nav-grupo {% if en_entidades %}abierto{% endif %}" id="grupoEntidades">
                     <div class="nav-item nav-item-grupo {% if request.url.path == '/entidades' %}active{% endif %}">
-                        <a href="/entidades" class="nav-grupo-link"><i class="bi bi-buildings-fill"></i> ENTIDADES</a>
+                        <a href="/entidades" class="nav-grupo-link"><i class="bi {{ icono }}"></i> {{ etiqueta }}</a>
                         <button type="button" class="nav-flecha" onclick="alternarGrupoMenu('grupoEntidades')"
                                 title="Ver sub-entidades" aria-expanded="{{ 'true' if en_entidades else 'false' }}">
                             <i class="bi bi-chevron-down"></i>
@@ -330,25 +354,18 @@
                         }
                     } catch (e) {}
                 </script>
-                <a href="/usuarios"         class="nav-item {% if request.url.path == '/usuarios' %}active{% endif %}"><i class="bi bi-people-fill"></i> USUARIOS</a>
-                <a href="/gestion-guias"     class="nav-item {% if request.url.path == '/gestion-guias' %}active{% endif %}"><i class="bi bi-person-badge-fill"></i> GUÍAS K9</a>
-                <a href="/caninos"           class="nav-item {% if request.url.path == '/caninos' %}active{% endif %}"><i class="bi bi-shield-fill"></i> CANINOS K9</a>
-                <a href="/salud-canina"      class="nav-item {% if request.url.path == '/salud-canina' %}active{% endif %}"><i class="bi bi-heart-pulse-fill"></i> SALUD CANINA</a>
-                <a href="/geolocalizacion"   class="nav-item {% if request.url.path == '/geolocalizacion' %}active{% endif %}"><i class="bi bi-geo-alt-fill"></i> GEOLOCALIZACIÓN</a>
-                <a href="/cursos"            class="nav-item {% if request.url.path == '/cursos' %}active{% endif %}"><i class="bi bi-mortarboard-fill"></i> ACADEMIA K9</a>
-                <a href="/notificaciones"    class="nav-item {% if request.url.path == '/notificaciones' %}active{% endif %}" id="navNotif"><i class="bi bi-bell-fill"></i> NOTIFICACIONES<span class="notif-badge" id="notifBadge"></span></a>
-            {% else %}
-                <a href="/usuarios"          class="nav-item {% if request.url.path == '/usuarios' %}active{% endif %}"><i class="bi bi-people-fill"></i> MIS USUARIOS</a>
-                <a href="/gestion-guias"     class="nav-item {% if request.url.path == '/gestion-guias' %}active{% endif %}"><i class="bi bi-person-badge-fill"></i> GUÍAS K9</a>
-                <a href="/caninos"           class="nav-item {% if request.url.path == '/caninos' %}active{% endif %}"><i class="bi bi-shield-fill"></i> CANINOS K9</a>
-                <a href="/salud-canina"      class="nav-item {% if request.url.path == '/salud-canina' %}active{% endif %}"><i class="bi bi-heart-pulse-fill"></i> SALUD CANINA</a>
-                <a href="/geolocalizacion"   class="nav-item {% if request.url.path == '/geolocalizacion' %}active{% endif %}"><i class="bi bi-geo-alt-fill"></i> GEOLOCALIZACIÓN</a>
-                <a href="/cursos"            class="nav-item {% if request.url.path == '/cursos' %}active{% endif %}"><i class="bi bi-mortarboard-fill"></i> ACADEMIA K9</a>
-                <a href="/notificaciones"    class="nav-item {% if request.url.path == '/notificaciones' %}active{% endif %}" id="navNotif"><i class="bi bi-bell-fill"></i> NOTIFICACIONES<span class="notif-badge" id="notifBadge"></span></a>
-            {% endif %}
+                {% elif ruta == '/notificaciones' %}
+                <a href="/notificaciones" class="nav-item {% if request.url.path == '/notificaciones' %}active{% endif %}" id="navNotif"><i class="bi {{ icono }}"></i> {{ etiqueta }}<span class="notif-badge" id="notifBadge"></span></a>
+                {% else %}
+                <a href="{{ ruta }}" class="nav-item {% if request.url.path == ruta %}active{% endif %}"><i class="bi {{ icono }}"></i> {{ etiqueta }}</a>
+                {% endif %}
+            {% endfor %}
         </nav>
 
         <div class="nav-footer">
+            <a href="/seguridad" class="nav-item {% if request.url.path == '/seguridad' %}active{% endif %}">
+                <i class="bi bi-shield-lock-fill"></i> SEGURIDAD
+            </a>
             <a href="/logout" class="nav-item" style="color:#ff6b6b; border-left-color:transparent;">
                 <i class="bi bi-box-arrow-left"></i> SALIR
             </a>
@@ -361,6 +378,7 @@
         </div>
     </main>
 
+{% if session.totp_activo %}
 <script>
 /* ══════════════════════════════════════════
    SISTEMA DE NOTIFICACIONES — polling + push
@@ -430,5 +448,6 @@
     setInterval(checkNotificaciones, 90_000);
 })();
 </script>
+{% endif %}
 </body>
 </html>

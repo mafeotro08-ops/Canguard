@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CANGUARD - Activar cuenta</title>
+    <style>
+        /* Mismos estilos que recuperar.html para mantener la rejilla y el neón */
+        :root {
+            --primary: #FFD700;
+            --accent: #00f2ff;
+            --bg-dark: #020810;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: radial-gradient(circle at center, #0a1e30 0%, #020810 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background-image: linear-gradient(rgba(255, 215, 0, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 215, 0, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg);
+            top: -50%;
+            animation: moveGrid 12s linear infinite;
+        }
+
+        @keyframes moveGrid {
+            from { background-position: 0 0; }
+            to { background-position: 0 500px; }
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 500px;
+            background: rgba(5, 15, 25, 0.85);
+            backdrop-filter: blur(20px);
+            padding: 50px;
+            border: 2px solid var(--primary);
+            position: relative;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+            clip-path: polygon(0 0, 92% 0, 100% 8%, 100% 100%, 8% 100%, 0 92%);
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--primary);
+            box-shadow: 0 0 20px var(--primary);
+            animation: scan 4s linear infinite;
+            z-index: 5;
+        }
+
+        @keyframes scan {
+            0% { top: 0; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: white; font-size: 35px; letter-spacing: 8px; font-weight: 900; }
+        .header h1 span { color: var(--primary); }
+        .header p { color: var(--primary); font-size: 10px; letter-spacing: 5px; }
+
+        .form-group { margin-bottom: 25px; }
+
+        .form-group label {
+            display: block;
+            color: white;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            color: white;
+            outline: none;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        /* Campo de contraseña con botón "ojito" para mostrar/ocultar */
+        .pass-wrap { position: relative; }
+        .pass-wrap input { padding-right: 50px; }
+        .btn-ojo {
+            position: absolute; top: 50%; right: 12px; transform: translateY(-50%);
+            background: none; border: none; padding: 4px; cursor: pointer;
+            color: rgba(255, 255, 255, 0.5); display: flex; transition: color 0.3s;
+        }
+        .btn-ojo:hover, .btn-ojo:focus-visible { color: var(--primary); outline: none; }
+        .btn-ojo svg { width: 20px; height: 20px; }
+
+        .btn-access {
+            width: 100%;
+            padding: 18px;
+            background: var(--primary);
+            color: black;
+            border: none;
+            font-weight: 900;
+            cursor: pointer;
+            display: block;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .register-text { text-align: center; margin-top: 20px; font-size: 13px; color: white; }
+
+        /* Lista de requisitos de la contraseña: se van marcando mientras se escribe */
+        .reglas { list-style: none; margin: 10px 0 0; font-size: 11px; color: rgba(255, 255, 255, 0.5); line-height: 18px; }
+        .reglas li::before { content: '○ '; }
+        .reglas li.ok { color: #4ade80; }
+        .reglas li.ok::before { content: '✔ '; }
+        .register-text a { color: var(--primary); text-decoration: none; }
+
+        .error-msg {
+            background: rgba(255, 77, 77, 0.15);
+            border: 1px solid rgba(255, 77, 77, 0.5);
+            color: #ff4d4d;
+            padding: 12px 16px;
+            font-size: 13px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-card">
+        <div class="scan-line"></div>
+        <div class="header">
+            <h1>CAN<span>GUARD</span></h1>
+            <p>ACTIVACIÓN DE CUENTA</p>
+        </div>
+
+        {% if valido %}
+        <!-- Envía la contraseña temporal del correo y la nueva a POST /activar (main.py) -->
+        <form action="/activar" method="post" onsubmit="return validarFormulario()">
+            {% if error %}
+            <div class="error-msg">⚠ {{ error }}</div>
+            {% endif %}
+            <!-- Error de validación en el navegador (antes de enviar) -->
+            <div class="error-msg" id="errCliente" style="display:none"></div>
+            <input type="hidden" name="token" value="{{ token }}">
+            <p style="font-size: 13px; color: #fff; margin-bottom: 20px; text-align: center; opacity: 0.8;">
+                Hola <strong>{{ nombre }}</strong>. Tu usuario es <strong style="color: var(--primary)">{{ nombre_usuario }}</strong>.
+                Escribe la contraseña temporal que recibiste por correo y crea tu propia contraseña para activar la cuenta.
+            </p>
+            <div class="form-group">
+                <label>Contraseña temporal (del correo)</label>
+                <div class="pass-wrap">
+                    <input type="password" name="password_temporal" placeholder="La que llegó en el correo" required
+                        autocomplete="off">
+                    <button type="button" class="btn-ojo" onclick="alternarClave(this)" aria-label="Mostrar contraseña"></button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Nueva contraseña</label>
+                <div class="pass-wrap">
+                    <!-- pattern/minlength repiten la política del servidor (app/seguridad.py) -->
+                    <input type="password" name="password" id="inpNueva" placeholder="Mínimo {{ LONGITUD_MIN_PASSWORD }} caracteres"
+                        minlength="{{ LONGITUD_MIN_PASSWORD }}" pattern="{{ PASSWORD_PATTERN }}" title="{{ REGLAS_PASSWORD }}" required
+                        autocomplete="new-password" oninput="evaluarReglas(this.value)">
+                    <button type="button" class="btn-ojo" onclick="alternarClave(this)" aria-label="Mostrar contraseña"></button>
+                </div>
+                <ul class="reglas" id="reglasPass">
+                    <li data-regla="len">Mínimo {{ LONGITUD_MIN_PASSWORD }} caracteres</li>
+                    <li data-regla="mayus">Una letra mayúscula</li>
+                    <li data-regla="minus">Una letra minúscula</li>
+                    <li data-regla="num">Un número</li>
+                    <li data-regla="esp">Un carácter especial (! @ # $ % &amp; *)</li>
+                </ul>
+            </div>
+            <div class="form-group">
+                <label>Confirmar contraseña</label>
+                <div class="pass-wrap">
+                    <input type="password" name="confirmar" id="inpConfirmar" placeholder="Repita la contraseña"
+                        minlength="{{ LONGITUD_MIN_PASSWORD }}" required autocomplete="new-password">
+                    <button type="button" class="btn-ojo" onclick="alternarClave(this)" aria-label="Mostrar contraseña"></button>
+                </div>
+            </div>
+            <button type="submit" class="btn-access">ACTIVAR MI CUENTA</button>
+            <div class="register-text"><a href="/login">Regresar al Inicio de Sesión</a></div>
+        </form>
+        {% else %}
+        <!-- El token no existe, ya se usó o venció -->
+        <div class="error-msg">⚠ El enlace de activación no es válido o ya venció. Pida a su administrador que lo reenvíe, o solicite uno nuevo con su usuario o correo.</div>
+        <a href="/recuperar" class="btn-access">SOLICITAR NUEVO ENLACE</a>
+        <div class="register-text"><a href="/login">Regresar al Inicio de Sesión</a></div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Íconos SVG del ojito: abierto (mostrar) y tachado (ocultar)
+        const OJO_ABIERTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        const OJO_TACHADO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+        // Marca en verde cada requisito que la contraseña ya cumple.
+        function evaluarReglas(valor) {
+            const r = {
+                len:   valor.length >= {{ LONGITUD_MIN_PASSWORD }},
+                mayus: /[A-Z]/.test(valor),
+                minus: /[a-z]/.test(valor),
+                num:   /[0-9]/.test(valor),
+                esp:   /[^A-Za-z0-9]/.test(valor),
+            };
+            document.querySelectorAll('#reglasPass li').forEach(li => li.classList.toggle('ok', !!r[li.dataset.regla]));
+            return Object.values(r).every(Boolean);
+        }
+
+        // Validación en el navegador antes de enviar (el servidor valida de nuevo).
+        function validarFormulario() {
+            const err = document.getElementById('errCliente');
+            const nueva = document.getElementById('inpNueva').value;
+            let mensaje = '';
+            if (!evaluarReglas(nueva)) mensaje = 'La contraseña no cumple todos los requisitos.';
+            else if (nueva !== document.getElementById('inpConfirmar').value) mensaje = 'Las contraseñas no coinciden.';
+            err.textContent = mensaje ? '⚠ ' + mensaje : '';
+            err.style.display = mensaje ? 'block' : 'none';
+            return !mensaje;
+        }
+
+        // Cambia el input entre "password" (puntos) y "text" (visible).
+        // Cada campo tiene su propio ojito, se manejan por separado.
+        function alternarClave(boton) {
+            const input = boton.previousElementSibling;
+            const mostrar = input.type === 'password';
+            input.type = mostrar ? 'text' : 'password';
+            boton.innerHTML = mostrar ? OJO_TACHADO : OJO_ABIERTO;
+            boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        }
+
+        // Al cargar, todos los botones arrancan con el ojo abierto
+        document.querySelectorAll('.btn-ojo').forEach(b => b.innerHTML = OJO_ABIERTO);
+    </script>
+</body>
+
+</html>

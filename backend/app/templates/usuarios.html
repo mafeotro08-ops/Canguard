@@ -46,6 +46,12 @@ tr:hover td { background: var(--surface-2); }
 .badge-admin { background: #dbeafe; color: #1d4ed8; }
 .badge-guia  { background: #d1fae5; color: #065f46; }
 .badge-user  { background: #f1f5f9; color: #475569; }
+.badge-pend  { background: #ffedd5; color: #9a3412; margin-left: 4px; }
+.btn-resend { background: transparent; border-color: #f59e0b; color: #f59e0b; }
+.btn-resend:hover { background: #f59e0b; color: #fff; }
+.badge-sin2fa { background: #fee2e2; color: #991b1b; margin-left: 4px; }
+.btn-2fa { background: transparent; border-color: #0ea5e9; color: #0ea5e9; }
+.btn-2fa:hover { background: #0ea5e9; color: #fff; }
 
 /* ── Barra de filtros ────────────────────────────────── */
 .filter-bar {
@@ -394,12 +400,28 @@ label.flbl {
                     {% else %}
                         <span class="badge badge-user">Usuario</span>
                     {% endif %}
+                    {% if u.estado == 'pendiente' %}
+                        <span class="badge badge-pend" title="Aún no ha activado su cuenta desde el correo">Pendiente</span>
+                    {% endif %}
+                    {% if u.estado == 'activo' and not u.totp_activo %}
+                        <span class="badge badge-sin2fa" title="Aún no ha vinculado la app de verificación en dos pasos"><i class="bi bi-shield-exclamation"></i> Sin 2FA</span>
+                    {% endif %}
                 </td>
                 {% if session.rol == 'super_admin' %}
                 <td>{{ u.nombre_entidad or '— Global —' }}</td>
                 {% endif %}
                 <td>{{ u.fecha_registro.strftime('%d/%m/%Y') if u.fecha_registro else '—' }}</td>
                 <td style="white-space:nowrap">
+                    {% if u.estado == 'pendiente' %}
+                    <button class="btn-accion btn-resend" onclick="confirmarReenviar({{ u.id }})" title="Reenviar correo de activación">
+                        <i class="bi bi-envelope-arrow-up-fill"></i>
+                    </button>
+                    {% endif %}
+                    {% if u.totp_activo %}
+                    <button class="btn-accion btn-2fa" onclick="confirmarQuitar2FA({{ u.id }})" title="Reiniciar verificación en dos pasos (perdió el celular)">
+                        <i class="bi bi-shield-slash"></i>
+                    </button>
+                    {% endif %}
                     <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ u.id }})" title="Editar">
                         <i class="bi bi-pencil-fill"></i>
                     </button>
@@ -442,6 +464,8 @@ label.flbl {
             <div class="usr-card-name">{{ u.nombre }}</div>
             <div class="usr-card-user">@{{ u.nombre_usuario or '—' }}</div>
             <span class="badge {{ ROL_CLS.get(u.rol, 'badge-user') }}">{{ ROL_MAP.get(u.rol, u.rol) }}</span>
+            {% if u.estado == 'pendiente' %}<span class="badge badge-pend" title="Aún no ha activado su cuenta desde el correo">Pendiente</span>{% endif %}
+            {% if u.estado == 'activo' and not u.totp_activo %}<span class="badge badge-sin2fa" title="Aún no ha vinculado la app de verificación en dos pasos"><i class="bi bi-shield-exclamation"></i> Sin 2FA</span>{% endif %}
             <div class="usr-card-meta">
                 <span><i class="bi bi-envelope-fill"></i> {{ u.email }}</span>
                 {% if u.telefono %}<span><i class="bi bi-telephone-fill"></i> {{ u.telefono }}</span>{% endif %}
@@ -449,6 +473,16 @@ label.flbl {
                 <span><i class="bi bi-calendar3"></i> {{ u.fecha_registro.strftime('%d/%m/%Y') if u.fecha_registro else '—' }}</span>
             </div>
             <div class="usr-card-actions">
+                {% if u.estado == 'pendiente' %}
+                <button class="btn-accion btn-resend" onclick="confirmarReenviar({{ u.id }})" title="Reenviar correo de activación">
+                    <i class="bi bi-envelope-arrow-up-fill"></i>
+                </button>
+                {% endif %}
+                {% if u.totp_activo %}
+                <button class="btn-accion btn-2fa" onclick="confirmarQuitar2FA({{ u.id }})" title="Reiniciar verificación en dos pasos (perdió el celular)">
+                    <i class="bi bi-shield-slash"></i>
+                </button>
+                {% endif %}
                 <button class="btn-accion btn-edit" onclick="abrirModalEditar({{ u.id }})" title="Editar">
                     <i class="bi bi-pencil-fill"></i>
                 </button>
@@ -574,30 +608,41 @@ label.flbl {
                 <input type="email" name="email" class="FInput" placeholder="correo@ejemplo.com" required>
             </div>
 
-            <!-- Contraseña (col 2 de la misma fila) -->
-            <div>
-                <label class="flbl">Contraseña <span class="req">*</span></label>
+            <!-- Al CREAR: la contraseña la genera el sistema y viaja en el correo de activación -->
+            <div id="grpPassNota">
+                <label class="flbl">Contraseña</label>
+                <div class="field-hint" style="color:#3b82f6;margin-top:10px;line-height:1.5">
+                    <i class="bi bi-envelope-check"></i> Se genera automáticamente y se envía al correo del usuario.
+                    Para activar la cuenta deberá cambiarla desde el enlace del correo.
+                </div>
+            </div>
+
+            <!-- Al EDITAR: nueva contraseña opcional, con la política de app/seguridad.py -->
+            <div id="grpPass1" style="display:none">
+                <label class="flbl">Nueva Contraseña</label>
                 <div class="pass-wrap">
                     <input type="password" id="inpPass" name="password" class="FInput"
-                           placeholder="••••••••" required minlength="6">
+                           placeholder="••••••••" minlength="{{ LONGITUD_MIN_PASSWORD }}"
+                           pattern="{{ PASSWORD_PATTERN }}" title="{{ REGLAS_PASSWORD }}" autocomplete="new-password">
                     <button type="button" class="pass-eye" onclick="togglePass('inpPass','eyePass1')">
                         <i id="eyePass1" class="bi bi-eye"></i>
                     </button>
                 </div>
+                <div class="field-hint" id="passHintEdit" style="color:#3b82f6">
+                    <i class="bi bi-info-circle"></i> Dejar en blanco para no cambiar la contraseña
+                </div>
             </div>
-            <div>
-                <label class="flbl">Confirmar Contraseña <span class="req">*</span></label>
+            <div id="grpPass2" style="display:none">
+                <label class="flbl">Confirmar Contraseña</label>
                 <div class="pass-wrap">
                     <input type="password" id="inpPass2" name="password2" class="FInput"
-                           placeholder="••••••••" required>
+                           placeholder="••••••••" autocomplete="new-password">
                     <button type="button" class="pass-eye" onclick="togglePass('inpPass2','eyePass2')">
                         <i id="eyePass2" class="bi bi-eye"></i>
                     </button>
                 </div>
                 <div class="field-hint err" id="hintPass"></div>
-                <div class="field-hint" id="passHintEdit" style="display:none;color:#3b82f6">
-                    <i class="bi bi-info-circle"></i> Dejar en blanco para no cambiar la contraseña
-                </div>
+                <div class="field-hint" style="line-height:1.5">{{ REGLAS_PASSWORD }}</div>
             </div>
 
             <!-- Confirmar contraseña ocupa col 1, Doc identidad col 2 en siguiente fila -->
@@ -632,12 +677,22 @@ label.flbl {
                 <label class="flbl">Rol <span class="req">*</span></label>
                 <select name="rol" id="selectRol" class="FInput" onchange="toggleEntidad()">
                     <option value="admin_entidad">Admin Entidad</option>
+                    <option value="instructor">Instructor</option>
                     <option value="guia_canino">Guía Canino</option>
                     <option value="super_admin">Super Admin</option>
                 </select>
             </div>
             {% else %}
-            <div class="fw">
+            <!-- El admin de entidad elige el rol entre los de su entidad (auth.ROLES_ENTIDAD) -->
+            <div>
+                <label class="flbl">Rol <span class="req">*</span></label>
+                <select name="rol" id="selectRolEntidad" class="FInput">
+                    <option value="guia_canino">Guía Canino</option>
+                    <option value="instructor">Instructor</option>
+                    <option value="admin_entidad">Admin Entidad</option>
+                </select>
+            </div>
+            <div>
                 <div class="info-note">
                     <i class="bi bi-info-circle-fill"></i>
                     Este usuario quedará asignado a <strong>tu entidad</strong> automáticamente.
@@ -671,11 +726,14 @@ const USUARIOS = {
         id_entidad:     {{ (u.id_entidad or 0) | tojson }},
         foto:           {{ (u.foto_perfil_path or '') | tojson }},
         documento:      {{ (u.documento or '') | tojson }},
-        tipo_documento: {{ (u.tipo_documento or 'CC') | tojson }}
+        tipo_documento: {{ (u.tipo_documento or 'CC') | tojson }},
+        estado:         {{ (u.estado or 'activo') | tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 };
 </script>
+<form id="formReenviarActivacion" method="POST" style="display:none"></form>
+<form id="formQuitar2FA" method="POST" style="display:none"></form>
 <form id="formEliminarUsuario" method="POST" style="display:none">
     <input type="hidden" name="confirmar" value="1">
 </form>
@@ -711,10 +769,8 @@ function abrirModalNuevo() {
     document.getElementById('modalFormTitle').innerHTML =
         'Nuevo <span style="color:var(--primary)">Usuario</span>';
     document.getElementById('btnGuardarUsuario').textContent = 'Crear Usuario';
-    // Contraseña obligatoria en creación
-    document.getElementById('inpPass').required  = true;
-    document.getElementById('inpPass2').required = true;
-    document.getElementById('passHintEdit').style.display = 'none';
+    // Al crear no se pide contraseña: la genera el sistema y va en el correo de activación
+    mostrarCamposPass(false);
     document.getElementById('hintPass').textContent = '';
     resetFotoPreview();
     usernameTocado = false;
@@ -749,11 +805,9 @@ function abrirModalEditar(id) {
     document.getElementById('inpDocumento').value = u.documento || '';
 
     // Contraseña opcional en edición
-    document.getElementById('inpPass').required  = false;
-    document.getElementById('inpPass').value     = '';
-    document.getElementById('inpPass2').required = false;
-    document.getElementById('inpPass2').value    = '';
-    document.getElementById('passHintEdit').style.display = 'block';
+    mostrarCamposPass(true);
+    document.getElementById('inpPass').value  = '';
+    document.getElementById('inpPass2').value = '';
     document.getElementById('hintPass').textContent = '';
     document.getElementById('docNombre').textContent = 'Ningún archivo seleccionado';
 
@@ -774,9 +828,68 @@ function abrirModalEditar(id) {
     if (u.id_entidad && document.getElementById('selEntidad')) {
         document.getElementById('selEntidad').value = u.id_entidad;
     }
+    {% else %}
+    // Admin de entidad: muestra el rol actual del usuario que está editando
+    const selRolEnt = document.getElementById('selectRolEntidad');
+    if (selRolEnt && u.rol) selRolEnt.value = u.rol;
     {% endif %}
 
     abrirModalUsuario();
+}
+
+/* ── Campos de contraseña: solo visibles al editar ────── */
+function mostrarCamposPass(visible) {
+    document.getElementById('grpPassNota').style.display = visible ? 'none' : '';
+    document.getElementById('grpPass1').style.display    = visible ? '' : 'none';
+    document.getElementById('grpPass2').style.display    = visible ? '' : 'none';
+}
+
+/* ── Reenviar correo de activación (usuarios pendientes) ─ */
+function confirmarReenviar(id) {
+    const u = USUARIOS[id];
+    if (!u) return;
+    Swal.fire({
+        title: '¿Reenviar activación?',
+        html:  `Se enviará un nuevo correo de activación a <strong>${u.email}</strong>
+                con una contraseña temporal nueva. La anterior dejará de servir.`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '<i class="bi bi-envelope-arrow-up-fill"></i> Sí, reenviar',
+        cancelButtonText: 'Cancelar',
+        customClass: { popup: 'swal-redondo' }
+    }).then(r => {
+        if (r.isConfirmed) {
+            const form = document.getElementById('formReenviarActivacion');
+            form.action = `/usuarios/${id}/reenviar-activacion`;
+            form.submit();
+        }
+    });
+}
+
+/* ── Quitar verificación en dos pasos (usuario sin celular) ── */
+function confirmarQuitar2FA(id) {
+    const u = USUARIOS[id];
+    if (!u) return;
+    Swal.fire({
+        title: '¿Reiniciar la verificación en dos pasos?',
+        html:  `<strong>${u.nombre}</strong> entrará con su contraseña y tendrá que vincular la app de nuevo.
+                Recibirá un aviso en <strong>${u.email}</strong>. Úsalo solo si perdió el celular y los códigos de respaldo.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#0ea5e9',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '<i class="bi bi-shield-slash"></i> Sí, reiniciar',
+        cancelButtonText: 'Cancelar',
+        customClass: { popup: 'swal-redondo' }
+    }).then(r => {
+        if (r.isConfirmed) {
+            const form = document.getElementById('formQuitar2FA');
+            form.action = `/usuarios/${id}/quitar-2fa`;
+            form.submit();
+        }
+    });
 }
 
 /* ── Confirmar eliminación con SweetAlert ─────────────── */
@@ -942,11 +1055,16 @@ inpPass2.addEventListener('input', () => {
         inpPass2.classList.remove('invalid');
     }
 });
+// Misma política que app/seguridad.py (el servidor la vuelve a validar)
+const REGEX_PASS = new RegExp('^{{ PASSWORD_PATTERN }}$');
 document.getElementById('formUsuario').addEventListener('submit', function(e) {
     const p1 = document.getElementById('inpPass').value;
-    if (p1 !== inpPass2.value) {
+    let msg = '';
+    if (p1 && !REGEX_PASS.test(p1)) msg = {{ REGLAS_PASSWORD | tojson }};
+    else if (p1 !== inpPass2.value) msg = 'Las contraseñas no coinciden';
+    if (msg) {
         e.preventDefault();
-        hintPass.textContent = 'Las contraseñas no coinciden';
+        hintPass.textContent = msg;
         inpPass2.classList.add('invalid');
         inpPass2.focus();
     }
@@ -1043,32 +1161,47 @@ document.addEventListener('DOMContentLoaded', () => {
         title: 'Usuario creado',
         html: `
             <p style="margin-bottom:16px">
-                <strong>{{ flash_nuevo.nombre }}</strong> ha sido registrado exitosamente.
+                <strong>{{ flash_nuevo.nombre }}</strong> ha sido registrado con el usuario
+                <code style="background:#eff6ff;border:1px solid #bfdbfe;padding:2px 8px;
+                             border-radius:6px;font-weight:700">{{ flash_nuevo.nombre_usuario }}</code>.
             </p>
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
-                        padding:16px;text-align:left;font-size:13px">
-                <div style="margin-bottom:10px">
-                    <span style="color:#64748b;font-size:10px;font-weight:700;
-                                 text-transform:uppercase;letter-spacing:1px">Nombre de usuario</span><br>
-                    <code style="background:#eff6ff;border:1px solid #bfdbfe;
-                                 padding:4px 12px;border-radius:6px;font-size:15px;
-                                 font-weight:700;display:inline-block;margin-top:4px">{{ flash_nuevo.nombre_usuario }}</code>
-                </div>
-                <div>
-                    <span style="color:#64748b;font-size:10px;font-weight:700;
-                                 text-transform:uppercase;letter-spacing:1px">Contraseña inicial</span><br>
-                    <code style="background:#fef9c3;border:1px solid #fcd34d;
-                                 padding:5px 14px;border-radius:6px;font-size:16px;
-                                 font-weight:700;letter-spacing:2px;display:inline-block;margin-top:4px">{{ flash_nuevo.password }}</code>
-                </div>
+            {% if flash_nuevo.enviado %}
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                        padding:14px;text-align:left;font-size:13px;color:#166534">
+                <i class="bi bi-envelope-check-fill"></i>
+                Se envió el correo de activación a <strong>{{ flash_nuevo.email }}</strong>
+                con una contraseña temporal. La cuenta quedará activa cuando el usuario la cambie
+                desde el enlace del correo.
             </div>
+            {% else %}
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;
+                        padding:14px;text-align:left;font-size:13px;color:#991b1b">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                No se pudo enviar el correo de activación a <strong>{{ flash_nuevo.email }}</strong>.
+                Revisa la configuración SMTP y usa "Reenviar activación" en la lista.
+            </div>
+            {% endif %}
             <p style="margin-top:14px;font-size:11px;color:#94a3b8">
-                &#9888; Comparte estas credenciales de forma segura. No volverán a mostrarse.
+                Por seguridad la contraseña temporal no se muestra aquí: solo la recibe el usuario.
             </p>`,
-        icon: 'success',
+        icon: {{ "'success'" if flash_nuevo.enviado else "'warning'" }},
         confirmButtonColor: '#b8860b',
         confirmButtonText: 'Entendido',
         width: 480,
+        customClass: { popup: 'swal-redondo' }
+    });
+});
+{% endif %}
+
+/* ── Flash genérico de éxito (p. ej. activación reenviada) ── */
+{% if flash_ok %}
+document.addEventListener('DOMContentLoaded', () => {
+    Swal.fire({
+        title: {{ flash_ok.titulo | tojson }},
+        text:  {{ flash_ok.texto | tojson }},
+        icon: 'success',
+        confirmButtonColor: '#b8860b',
+        confirmButtonText: 'Entendido',
         customClass: { popup: 'swal-redondo' }
     });
 });

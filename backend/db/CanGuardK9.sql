@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS Usuario (
     DocIdentidadPath VARCHAR(255) NULL,
     Estado           VARCHAR(10)  NOT NULL DEFAULT 'pendiente'
                      -- pendiente = creado por un admin, aun no activa la cuenta
-                     CHECK (Estado IN ('pendiente','activo','inactivo','bloqueado')),
+                     CONSTRAINT CkUsuarioEstado CHECK (Estado IN ('pendiente','activo','inactivo','bloqueado')),
     IntentosFallidos SMALLINT     NOT NULL DEFAULT 0,
     BloqueadoHasta   TIMESTAMP    NULL,       -- bloqueo temporal por intentos fallidos
     -- Verificacion en dos pasos (Google Authenticator): secreto cifrado con TOTP_KEY
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS TokenRecuperacion (
     IpSolicitud  VARCHAR(45) NULL,
     -- recuperacion = olvide mi contrasena; activacion = usuario nuevo
     Tipo         VARCHAR(12) NOT NULL DEFAULT 'recuperacion'
-                 CHECK (Tipo IN ('recuperacion','activacion')),
+                 CONSTRAINT CkTokenTipo CHECK (Tipo IN ('recuperacion','activacion')),
     FechaRegistro TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT UqTokenHash UNIQUE (TokenHash),
     CONSTRAINT FkTokenUsuario FOREIGN KEY (IdUsuario) REFERENCES Usuario(IdUsuario) ON DELETE CASCADE
@@ -841,3 +841,51 @@ INSERT INTO Etiqueta (IdEntidad, Nombre) VALUES
  (NULL,'Obediencia'), (NULL,'Salto'), (NULL,'Reporte de objeto'),
  (NULL,'Permanencia'), (NULL,'Socializacion'), (NULL,'Evaluacion')
 ON CONFLICT DO NOTHING;
+
+
+-- =====================================================================
+--  ACTUALIZACIONES PARA BASES QUE YA EXISTIAN
+--  El despliegue ejecuta este archivo completo en cada publicacion. Los
+--  CREATE TABLE IF NOT EXISTS de arriba no tocan las tablas que ya existen,
+--  asi que todo lo que se agrega a una tabla creada antes va aqui, escrito
+--  de forma que se pueda ejecutar las veces que sea sin danar nada.
+--  (Para instalaciones nuevas no hace nada: ya quedo todo arriba.)
+-- =====================================================================
+
+-- Activacion de cuentas por correo y bloqueo por intentos fallidos
+ALTER TABLE Usuario ADD COLUMN IF NOT EXISTS BloqueadoHasta TIMESTAMP NULL;
+ALTER TABLE Usuario ALTER COLUMN Estado SET DEFAULT 'pendiente';
+DO $$
+DECLARE c RECORD;
+BEGIN
+    -- El CHECK de Estado debe admitir 'pendiente'; si el actual no lo tiene se reemplaza
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conrelid = 'usuario'::regclass AND contype = 'c'
+                      AND pg_get_constraintdef(oid) ILIKE '%pendiente%') THEN
+        FOR c IN SELECT conname FROM pg_constraint
+                  WHERE conrelid = 'usuario'::regclass AND contype = 'c'
+                    AND pg_get_constraintdef(oid) ILIKE '%estado%'
+        LOOP
+            EXECUTE format('ALTER TABLE Usuario DROP CONSTRAINT %I', c.conname);
+        END LOOP;
+        ALTER TABLE Usuario ADD CONSTRAINT CkUsuarioEstado
+            CHECK (Estado IN ('pendiente','activo','inactivo','bloqueado'));
+    END IF;
+END $$;
+
+-- Tokens de correo: recuperacion de contrasena y activacion de cuenta
+ALTER TABLE TokenRecuperacion ADD COLUMN IF NOT EXISTS Tipo VARCHAR(12) NOT NULL DEFAULT 'recuperacion';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conrelid = 'tokenrecuperacion'::regclass AND conname = 'cktokentipo') THEN
+        ALTER TABLE TokenRecuperacion ADD CONSTRAINT CkTokenTipo
+            CHECK (Tipo IN ('recuperacion','activacion'));
+    END IF;
+END $$;
+
+-- Verificacion en dos pasos (la tabla CodigoRespaldo ya se crea arriba)
+ALTER TABLE Usuario ADD COLUMN IF NOT EXISTS TotpSecret          VARCHAR(255) NULL;
+ALTER TABLE Usuario ADD COLUMN IF NOT EXISTS TotpActivo          BOOLEAN      NOT NULL DEFAULT FALSE;
+ALTER TABLE Usuario ADD COLUMN IF NOT EXISTS TotpUltimoIntervalo BIGINT       NULL;
+ALTER TABLE Usuario ADD COLUMN IF NOT EXISTS TotpActivadoEn      TIMESTAMP    NULL;

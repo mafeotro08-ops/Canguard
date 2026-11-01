@@ -290,8 +290,10 @@ async def login_2fa_post(request: Request, codigo: str = Form(...)):
             ])
             return _completar_login(request, user)
     else:
-        intervalo = f2a.verificar_codigo(f2a.descifrar_secreto(user['totp_secret']), codigo,
-                                         user.get('totp_ultimo_intervalo'))
+        secreto = _secreto_totp(user)
+        if not secreto:
+            return error(MSG_SIN_TOTP_KEY, 500)
+        intervalo = f2a.verificar_codigo(secreto, codigo, user.get('totp_ultimo_intervalo'))
         if intervalo is not None:
             registrar_totp_usado(user['id'], intervalo)
             return _completar_login(request, user)
@@ -304,6 +306,19 @@ async def login_2fa_post(request: Request, codigo: str = Form(...)):
             'error': f'Cuenta bloqueada por {MINUTOS_BLOQUEO} minutos tras varios códigos incorrectos.',
         }, status_code=401)
     return error('Código incorrecto. Revisa la app o usa un código de respaldo.')
+
+
+MSG_SIN_TOTP_KEY = ('La verificación en dos pasos no está disponible: falta TOTP_KEY en el .env del '
+                    'servidor (o se cambió). Avisa al administrador del sistema.')
+
+
+def _secreto_totp(user: dict) -> str | None:
+    """Secreto TOTP del usuario en claro, o None si no se puede descifrar
+    (no hay TOTP_KEY en el servidor o se cambió después de guardarlo)."""
+    try:
+        return f2a.descifrar_secreto(user['totp_secret']) if user.get('totp_secret') else None
+    except Exception:
+        return None
 
 
 def _setup_2fa(user: dict, secreto: str) -> dict:
@@ -319,7 +334,11 @@ def _render_seguridad(request: Request, user: dict, error=None, ok=None, setup=N
     # Si ya hay un secreto pendiente (recién activó la cuenta, o no terminó el
     # paso anterior) se muestra el QR directamente.
     if setup is None and not activo and user.get('totp_secret'):
-        setup = _setup_2fa(user, f2a.descifrar_secreto(user['totp_secret']))
+        secreto = _secreto_totp(user)
+        if secreto:
+            setup = _setup_2fa(user, secreto)
+        else:
+            error = error or MSG_SIN_TOTP_KEY
     return templates.TemplateResponse('seguridad.html', ctx(
         request, usuario=user, activo=activo, error=error, ok=ok, setup=setup, codigos=codigos,
         restantes=contar_codigos_respaldo(user['id']) if activo else 0,
@@ -342,8 +361,10 @@ def _error_credenciales_2fa(request: Request, user: dict, password: str, codigo:
         registrar_login_fallido(user['id'], MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO)
         return 'La contraseña no es correcta.'
     if codigo is not None:
-        intervalo = f2a.verificar_codigo(f2a.descifrar_secreto(user['totp_secret']), codigo,
-                                         user.get('totp_ultimo_intervalo'))
+        secreto = _secreto_totp(user)
+        if not secreto:
+            return MSG_SIN_TOTP_KEY
+        intervalo = f2a.verificar_codigo(secreto, codigo, user.get('totp_ultimo_intervalo'))
         if intervalo is None:
             registrar_login_fallido(user['id'], MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO)
             return 'El código de la app no es válido.'
@@ -372,7 +393,10 @@ async def seguridad_2fa_iniciar(request: Request, password: str = Form(...)):
     if error:
         return _render_seguridad(request, user, error=error, status=401)
     secreto = f2a.generar_secreto()
-    guardar_totp_pendiente(user['id'], f2a.cifrar_secreto(secreto))
+    try:
+        guardar_totp_pendiente(user['id'], f2a.cifrar_secreto(secreto))
+    except RuntimeError:
+        return _render_seguridad(request, user, error=MSG_SIN_TOTP_KEY, status=500)
     return _render_seguridad(request, user, setup=_setup_2fa(user, secreto))
 
 
@@ -388,7 +412,9 @@ async def seguridad_2fa_confirmar(request: Request, codigo: str = Form(...)):
         return RedirectResponse(url='/seguridad', status_code=303)
     if not limitador_login.permitir(_ip_cliente(request), 30, 300):
         return _render_seguridad(request, user, error='Demasiados intentos. Espera unos minutos.', status=429)
-    secreto = f2a.descifrar_secreto(user['totp_secret'])
+    secreto = _secreto_totp(user)
+    if not secreto:
+        return _render_seguridad(request, user, error=MSG_SIN_TOTP_KEY, status=500)
     intervalo = f2a.verificar_codigo(secreto, codigo)
     if intervalo is None:
         return _render_seguridad(request, user, setup=_setup_2fa(user, secreto), status=400,
@@ -730,7 +756,10 @@ async def activar_post(request: Request,
     # Último paso de la activación: vincular Google Authenticator. Se deja el
     # secreto listo y se abre sesión; el middleware solo permite /seguridad
     # hasta que confirme el código.
-    guardar_totp_pendiente(user['id'], f2a.cifrar_secreto(f2a.generar_secreto()))
+    try:
+        guardar_totp_pendiente(user['id'], f2a.cifrar_secreto(f2a.generar_secreto()))
+    except RuntimeError:
+        pass   # sin TOTP_KEY: /seguridad mostrará el aviso en vez de fallar
     user = get_usuario_by_id(user['id'])
     notificar_cambio_password(request, user, 'al activar tu cuenta')
     _completar_login(request, user)

@@ -10,6 +10,7 @@ import re
 import shutil
 import secrets
 import hashlib
+import time
 
 try:
     from dotenv import load_dotenv
@@ -17,7 +18,7 @@ try:
 except ImportError:
     pass
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from .models import (
     verify_user, get_all_entidades, get_entidad_by_id,
     create_entidad, update_entidad, delete_entidad,
@@ -34,14 +35,28 @@ from .models import (
     get_sesion_by_id, get_vision_archivos, create_vision_archivo, delete_vision_archivo,
     get_all_vision_archivos,
     update_sesion_curso, marcar_sesion_en_proceso,
+    get_usuario_by_id,
+    canino_es_del_guia, sesion_es_del_usuario, get_id_sesion_de_archivo, get_id_canino_de_vacuna,
     get_user_by_username_o_email, crear_token_recuperacion,
     get_token_recuperacion_valido, usar_token_recuperacion,
+    get_user_by_username, registrar_login_fallido, registrar_login_ok,
+    contar_tokens_recientes, set_password_temporal, activar_usuario,
+    guardar_totp_pendiente, activar_totp, registrar_totp_usado, desactivar_totp,
+    reemplazar_codigos_respaldo, usar_codigo_respaldo, contar_codigos_respaldo,
 )
 from .correo import enviar_correo
+from .seguridad import (
+    validar_password, generar_password_temporal, REGLAS_PASSWORD,
+    PASSWORD_PATTERN_HTML, LONGITUD_MIN_PASSWORD,
+    limitador_login, limitador_recuperar, MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO,
+)
+from . import dosfactores as f2a
 from psycopg import errors as pg_errors
 from .auth import (
     crear_sesion, es_sesion_valida, es_super_admin, cerrar_sesion,
     redirigir_si_no_autenticado, redirigir_si_no_super_admin,
+    es_guia, id_usuario_sesion, redirigir_si_guia, NOMBRE_ROL, ROLES_ENTIDAD,
+    ICONO_ROL, modulos_de, ruta_permitida, RUTAS_SIN_2FA,
 )
 
 # ---------------------------------------------------------------------------
@@ -49,6 +64,26 @@ from .auth import (
 # ---------------------------------------------------------------------------
 
 app = FastAPI()
+
+
+@app.middleware('http')
+async def control_de_acceso(request: Request, call_next):
+    """Dos reglas para todo usuario logueado:
+      1. La verificación en dos pasos es OBLIGATORIA: hasta que no la configure,
+         solo puede estar en Seguridad (y salir).
+      2. Cada rol solo entra a sus módulos (auth.MODULOS); lo demás va al dashboard.
+    Se registra ANTES de SessionMiddleware para que este lo envuelva y la sesión
+    ya esté leída cuando se ejecute."""
+    sesion = request.session if 'session' in request.scope else {}
+    path = request.url.path
+    if sesion.get('usuario_valido') and not sesion.get('totp_activo') \
+            and not path.startswith(RUTAS_SIN_2FA):
+        return RedirectResponse(url='/seguridad', status_code=302)
+    rol = sesion.get('rol')
+    if rol and not ruta_permitida(rol, path):
+        return RedirectResponse(url='/index', status_code=302)
+    return await call_next(request)
+
 
 app.add_middleware(
     SessionMiddleware,
@@ -64,6 +99,15 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, 'templates'))
 # (las plantillas lo usan para mostrar "disponible hasta ...").
 templates.env.globals['RETENCION_DIAS'] = int(os.getenv('VIDEO_RETENCION_DIAS', '30'))
 templates.env.globals['timedelta'] = timedelta
+# Nombre, ícono y módulos de cada rol para el menú (ver auth.py)
+templates.env.globals['NOMBRE_ROL'] = NOMBRE_ROL
+templates.env.globals['ICONO_ROL']  = ICONO_ROL
+templates.env.globals['modulos_de'] = modulos_de
+# Política de contraseñas (app/seguridad.py): la usan los formularios para
+# mostrar las reglas y validarlas en el navegador antes de enviar.
+templates.env.globals['REGLAS_PASSWORD']       = REGLAS_PASSWORD
+templates.env.globals['PASSWORD_PATTERN']      = PASSWORD_PATTERN_HTML
+templates.env.globals['LONGITUD_MIN_PASSWORD'] = LONGITUD_MIN_PASSWORD
 
 static_path = os.path.join(BASE_DIR, 'static')
 if not os.path.exists(static_path):
@@ -99,18 +143,59 @@ async def login_page(request: Request):
     return templates.TemplateResponse('login.html', {'request': request, 'error': None})
 
 
+def _ip_cliente(request: Request) -> str:
+    return (request.client.host if request.client else None) or 'desconocida'
+
+
 @app.post('/login', response_class=HTMLResponse)
 async def login_post(request: Request,
                      username: str = Form(...),
                      password: str = Form(...)):
+    def error(msg, status=401):
+        return templates.TemplateResponse('login.html', {'request': request, 'error': msg},
+                                          status_code=status)
+
+    # Freno por IP: 30 intentos cada 5 minutos, para frenar bots y fuerza bruta
+    # (varios usuarios de una entidad pueden compartir la misma IP pública).
+    if not limitador_login.permitir(_ip_cliente(request), 30, 300):
+        return error('Demasiados intentos. Espera unos minutos e inténtalo de nuevo.', 429)
+
+    username = username.strip()
+    existente = get_user_by_username(username)
+    if existente and existente.get('bloqueado_temporal'):
+        minutos = int(existente.get('minutos_bloqueo') or MINUTOS_BLOQUEO)
+        return error(f'Cuenta bloqueada temporalmente por varios intentos fallidos. '
+                     f'Inténtalo en {minutos} minuto(s) o usa "¿Olvidó su clave?".')
+
     user = verify_user(username, password)
     if not user:
-        return templates.TemplateResponse(
-            'login.html',
-            {'request': request, 'error': 'Usuario o contraseña incorrectos'},
-            status_code=401,
-        )
-    crear_sesion(request, user)
+        if existente and registrar_login_fallido(existente['id'], MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO):
+            return error(f'Cuenta bloqueada por {MINUTOS_BLOQUEO} minutos tras '
+                         f'{MAX_INTENTOS_FALLIDOS} intentos fallidos. Usa "¿Olvidó su clave?" si no la recuerdas.')
+        return error('Usuario o contraseña incorrectos')
+
+    # La contraseña temporal del correo solo sirve para activar la cuenta, no para entrar.
+    if user.get('estado') == 'pendiente':
+        return error('Tu cuenta aún no está activada. Abre el enlace del correo de activación '
+                     'y crea tu contraseña. Si no lo tienes, pide uno nuevo en "¿Olvidó su clave?".', 403)
+    if user.get('estado') != 'activo':
+        return error('Tu cuenta está inactiva. Contacta al administrador de tu entidad.', 403)
+
+    if user.get('totp_activo'):
+        # Contraseña correcta pero falta el segundo paso: todavía NO hay sesión.
+        # Se deja un estado intermedio de pocos minutos que solo sirve para /login/2fa.
+        request.session.clear()
+        request.session['pre_2fa'] = {'id': user['id'], 'exp': time.time() + MINUTOS_PRE_2FA * 60}
+        return RedirectResponse(url='/login/2fa', status_code=303)
+
+    return _completar_login(request, user)
+
+
+def _completar_login(request: Request, user: dict):
+    request.session.pop('pre_2fa', None)
+    registrar_login_ok(user['id'])
+    entidad = get_entidad_by_id(user['id_entidad']) if user.get('id_entidad') else None
+    crear_sesion(request, user, nombre_entidad=entidad['razon_social'] if entidad else None)
     return RedirectResponse(url='/index', status_code=303)
 
 
@@ -118,6 +203,227 @@ async def login_post(request: Request,
 async def logout(request: Request):
     cerrar_sesion(request)
     return RedirectResponse(url='/login', status_code=302)
+
+
+# ---------------------------------------------------------------------------
+# Verificación en dos pasos (Google Authenticator / TOTP) -> app/dosfactores.py
+#   Es OBLIGATORIA para todas las cuentas (middleware control_de_acceso):
+#   - Usuario nuevo: al activar la cuenta crea su contraseña y, acto seguido,
+#     vincula la app en /seguridad. Hasta entonces no puede usar nada más.
+#   - Cuenta existente sin 2FA: al entrar se le lleva a /seguridad a configurarla.
+#   Login:   POST /login deja un estado intermedio (pre_2fa) y manda a
+#            /login/2fa, que pide el código y recién ahí crea la sesión.
+#   Usuario: /seguridad: vincular con QR + código y códigos de respaldo.
+#   Admin:   POST /usuarios/{id}/quitar-2fa para quien perdió el celular; al
+#            volver a entrar tendrá que configurarla de nuevo.
+#   Cada cambio envía un correo de aviso (emails/aviso_seguridad.html).
+# ---------------------------------------------------------------------------
+
+MINUTOS_PRE_2FA = 5
+
+
+def enviar_aviso_seguridad(request: Request, user: dict, asunto: str, titulo: str, parrafos: list[str]):
+    """Correo de alerta por un cambio de seguridad en la cuenta."""
+    if not user.get('email'):
+        return
+    ahora   = datetime.now(_zona_horaria())
+    app_url = os.getenv('APP_URL', str(request.base_url)).rstrip('/')
+    soporte = os.getenv('SOPORTE_EMAIL') or os.getenv('SMTP_FROM') or os.getenv('SMTP_USER') or ''
+    datos = {
+        'nombre': user.get('nombre') or user.get('nombre_usuario'), 'titulo': titulo, 'parrafos': parrafos,
+        'fecha': f'{ahora.day} de {MESES[ahora.month - 1]} de {ahora.year}', 'hora': ahora.strftime('%H:%M'),
+        'dispositivo': _dispositivo(request), 'enlace_recuperar': f'{app_url}/recuperar', 'soporte': soporte,
+    }
+    html  = templates.get_template('emails/aviso_seguridad.html').render(**datos)
+    texto = (f"{titulo}\n\nHola {datos['nombre']},\n\n" + '\n\n'.join(parrafos)
+             + f"\n\nFecha: {datos['fecha']}, {datos['hora']}\nDispositivo: {datos['dispositivo']}\n\n"
+             f"Si fuiste tú, no tienes que hacer nada.\n"
+             f"Si NO fuiste tú, cambia tu contraseña de inmediato aquí: {datos['enlace_recuperar']}\n")
+    if soporte:
+        texto += f"También puedes escribir a soporte: {soporte}\n"
+    enviar_correo(user['email'], f'{asunto} · CanGuard K9', texto, html)
+
+
+def _usuario_pre_2fa(request: Request):
+    """Usuario que ya pasó la contraseña y está en el segundo paso, o None si
+    no hay estado intermedio o ya venció."""
+    datos = request.session.get('pre_2fa') or {}
+    if not datos or datos.get('exp', 0) < time.time():
+        request.session.pop('pre_2fa', None)
+        return None
+    user = get_usuario_by_id(datos['id'])
+    if not user or not user.get('totp_activo') or user.get('estado') != 'activo':
+        return None
+    return user
+
+
+@app.get('/login/2fa', response_class=HTMLResponse)
+async def login_2fa_page(request: Request):
+    if not _usuario_pre_2fa(request):
+        return RedirectResponse(url='/login', status_code=302)
+    return templates.TemplateResponse('login_2fa.html', {'request': request, 'error': None})
+
+
+@app.post('/login/2fa', response_class=HTMLResponse)
+async def login_2fa_post(request: Request, codigo: str = Form(...)):
+    user = _usuario_pre_2fa(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+
+    def error(msg, status=401):
+        return templates.TemplateResponse('login_2fa.html', {'request': request, 'error': msg}, status_code=status)
+
+    if not limitador_login.permitir(_ip_cliente(request), 30, 300):
+        return error('Demasiados intentos. Espera unos minutos e inténtalo de nuevo.', 429)
+    if user.get('bloqueado_temporal'):
+        request.session.pop('pre_2fa', None)
+        return RedirectResponse(url='/login', status_code=303)
+
+    codigo = codigo.strip()
+    if f2a.es_codigo_respaldo(codigo) and not (len(codigo) == 6 and codigo.isdigit()):
+        # Código de respaldo (ABCD-EFGH): un solo uso, y se avisa por correo.
+        if usar_codigo_respaldo(user['id'], f2a.hash_codigo_respaldo(codigo)):
+            restantes = contar_codigos_respaldo(user['id'])
+            enviar_aviso_seguridad(request, user, 'Usaste un código de respaldo', 'Se usó un código de respaldo', [
+                'Se inició sesión en tu cuenta con uno de tus códigos de respaldo en lugar del código de la app.',
+                f'Te quedan {restantes} códigos sin usar. Puedes generar nuevos en Seguridad.',
+            ])
+            return _completar_login(request, user)
+    else:
+        intervalo = f2a.verificar_codigo(f2a.descifrar_secreto(user['totp_secret']), codigo,
+                                         user.get('totp_ultimo_intervalo'))
+        if intervalo is not None:
+            registrar_totp_usado(user['id'], intervalo)
+            return _completar_login(request, user)
+
+    # Código incorrecto: cuenta con el mismo contador del login (5 fallos -> 15 min).
+    if registrar_login_fallido(user['id'], MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO):
+        request.session.pop('pre_2fa', None)
+        return templates.TemplateResponse('login.html', {
+            'request': request,
+            'error': f'Cuenta bloqueada por {MINUTOS_BLOQUEO} minutos tras varios códigos incorrectos.',
+        }, status_code=401)
+    return error('Código incorrecto. Revisa la app o usa un código de respaldo.')
+
+
+def _setup_2fa(user: dict, secreto: str) -> dict:
+    """Datos del paso "escanea el QR" para seguridad.html."""
+    return {'qr': f2a.qr_data_uri(f2a.url_otpauth(secreto, user['nombre_usuario'])),
+            'secreto': f2a.secreto_legible(secreto)}
+
+
+def _render_seguridad(request: Request, user: dict, error=None, ok=None, setup=None, codigos=None, status=200):
+    activo = bool(user.get('totp_activo'))
+    if ok is None:
+        ok = request.session.pop('flash_seguridad', None)
+    # Si ya hay un secreto pendiente (recién activó la cuenta, o no terminó el
+    # paso anterior) se muestra el QR directamente.
+    if setup is None and not activo and user.get('totp_secret'):
+        setup = _setup_2fa(user, f2a.descifrar_secreto(user['totp_secret']))
+    return templates.TemplateResponse('seguridad.html', ctx(
+        request, usuario=user, activo=activo, error=error, ok=ok, setup=setup, codigos=codigos,
+        restantes=contar_codigos_respaldo(user['id']) if activo else 0,
+    ), status_code=status)
+
+
+def _usuario_logueado(request: Request):
+    return get_usuario_by_id(id_usuario_sesion(request) or 0)
+
+
+def _error_credenciales_2fa(request: Request, user: dict, password: str, codigo: str | None = None) -> str | None:
+    """Para las acciones sensibles de /seguridad: contraseña y, si aplica, un
+    código válido de la app. Devuelve el mensaje de error o None si todo está bien.
+    Los fallos cuentan para el bloqueo de la cuenta igual que en el login."""
+    if not limitador_login.permitir(_ip_cliente(request), 30, 300):
+        return 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'
+    if user.get('bloqueado_temporal'):
+        return 'Cuenta bloqueada temporalmente por varios intentos fallidos. Inténtalo más tarde.'
+    if not verify_user(user['nombre_usuario'], password):
+        registrar_login_fallido(user['id'], MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO)
+        return 'La contraseña no es correcta.'
+    if codigo is not None:
+        intervalo = f2a.verificar_codigo(f2a.descifrar_secreto(user['totp_secret']), codigo,
+                                         user.get('totp_ultimo_intervalo'))
+        if intervalo is None:
+            registrar_login_fallido(user['id'], MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO)
+            return 'El código de la app no es válido.'
+        registrar_totp_usado(user['id'], intervalo)
+    return None
+
+
+@app.get('/seguridad', response_class=HTMLResponse)
+async def seguridad_page(request: Request):
+    r = redirigir_si_no_autenticado(request)
+    if r:
+        return r
+    return _render_seguridad(request, _usuario_logueado(request))
+
+
+@app.post('/seguridad/2fa/iniciar', response_class=HTMLResponse)
+async def seguridad_2fa_iniciar(request: Request, password: str = Form(...)):
+    """Paso 1: confirmar contraseña, generar el secreto (pendiente) y mostrar el QR."""
+    r = redirigir_si_no_autenticado(request)
+    if r:
+        return r
+    user = _usuario_logueado(request)
+    if user.get('totp_activo'):
+        return _render_seguridad(request, user, error='La verificación en dos pasos ya está activa.', status=400)
+    error = _error_credenciales_2fa(request, user, password)
+    if error:
+        return _render_seguridad(request, user, error=error, status=401)
+    secreto = f2a.generar_secreto()
+    guardar_totp_pendiente(user['id'], f2a.cifrar_secreto(secreto))
+    return _render_seguridad(request, user, setup=_setup_2fa(user, secreto))
+
+
+@app.post('/seguridad/2fa/confirmar', response_class=HTMLResponse)
+async def seguridad_2fa_confirmar(request: Request, codigo: str = Form(...)):
+    """Paso 2: el código de la app confirma que el QR se escaneó bien. Recién
+    aquí se activa el 2FA, se entregan los códigos de respaldo y se avisa por correo."""
+    r = redirigir_si_no_autenticado(request)
+    if r:
+        return r
+    user = _usuario_logueado(request)
+    if user.get('totp_activo') or not user.get('totp_secret'):
+        return RedirectResponse(url='/seguridad', status_code=303)
+    if not limitador_login.permitir(_ip_cliente(request), 30, 300):
+        return _render_seguridad(request, user, error='Demasiados intentos. Espera unos minutos.', status=429)
+    secreto = f2a.descifrar_secreto(user['totp_secret'])
+    intervalo = f2a.verificar_codigo(secreto, codigo)
+    if intervalo is None:
+        return _render_seguridad(request, user, setup=_setup_2fa(user, secreto), status=400,
+                                 error='El código no coincide. Revisa que la app muestre "CanGuard K9" y vuelve a intentarlo.')
+    activar_totp(user['id'], intervalo)
+    request.session['totp_activo'] = True   # a partir de aquí el middleware deja pasar
+    codigos = f2a.generar_codigos_respaldo()
+    reemplazar_codigos_respaldo(user['id'], [f2a.hash_codigo_respaldo(c) for c in codigos])
+    enviar_aviso_seguridad(request, user, 'Activaste la verificación en dos pasos', 'Verificación en dos pasos activada', [
+        'Desde ahora, al iniciar sesión se pedirá el código de tu app de autenticación además de la contraseña.',
+        'Guarda bien tus códigos de respaldo: son la única forma de entrar si pierdes el celular.',
+    ])
+    user = get_usuario_by_id(user['id'])
+    return _render_seguridad(request, user, codigos=codigos,
+                             ok='Verificación en dos pasos activada. Guarda tus códigos de respaldo; ya puedes usar CanGuard.')
+
+
+@app.post('/seguridad/2fa/codigos', response_class=HTMLResponse)
+async def seguridad_2fa_codigos(request: Request, password: str = Form(...), codigo: str = Form(...)):
+    """Códigos de respaldo nuevos (los anteriores dejan de servir)."""
+    r = redirigir_si_no_autenticado(request)
+    if r:
+        return r
+    user = _usuario_logueado(request)
+    if not user.get('totp_activo'):
+        return RedirectResponse(url='/seguridad', status_code=303)
+    error = _error_credenciales_2fa(request, user, password, codigo)
+    if error:
+        return _render_seguridad(request, user, error=error, status=401)
+    codigos = f2a.generar_codigos_respaldo()
+    reemplazar_codigos_respaldo(user['id'], [f2a.hash_codigo_respaldo(c) for c in codigos])
+    enviar_aviso_seguridad(request, user, 'Códigos de respaldo nuevos', 'Se generaron códigos de respaldo nuevos', [
+        'Se generaron códigos de respaldo nuevos para tu cuenta. Los anteriores ya no sirven.',
+    ])
+    return _render_seguridad(request, user, codigos=codigos, ok='Códigos de respaldo nuevos generados.')
 
 
 @app.get('/recuperar', response_class=HTMLResponse)
@@ -142,9 +448,20 @@ MSG_RECUPERAR_OK = ('Si los datos corresponden a un usuario activo, enviamos un 
 
 @app.post('/recuperar', response_class=HTMLResponse)
 async def recover_post(request: Request, identificador: str = Form(...)):
+    # Freno por IP: 5 solicitudes cada 15 minutos. La respuesta es la misma
+    # de siempre para no revelar nada.
+    if not limitador_recuperar.permitir(_ip_cliente(request), 5, 900):
+        return templates.TemplateResponse('recuperar.html', {'request': request, 'ok': MSG_RECUPERAR_OK})
+
     user = get_user_by_username_o_email(identificador.strip())
 
-    if user and user.get('estado') == 'activo':
+    if user and user.get('estado') == 'pendiente':
+        # Todavía no activó la cuenta: lo que necesita es el correo de activación,
+        # no el de recuperación. Con límite de reenvíos (ver _puede_reenviar_activacion).
+        if _puede_reenviar_activacion(user['id']) is None:
+            enviar_activacion(request, user)
+
+    elif user and user.get('estado') == 'activo':
         # El token en claro solo viaja en el enlace; en la base va su SHA-256.
         token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
@@ -173,6 +490,88 @@ async def recover_post(request: Request, identificador: str = Form(...)):
     return templates.TemplateResponse('recuperar.html', {'request': request, 'ok': MSG_RECUPERAR_OK})
 
 
+# ---------------------------------------------------------------------------
+# Aviso de cambio de contraseña (segundo correo del flujo)
+#   Se envía SIEMPRE que la contraseña de un usuario cambia: al restablecerla
+#   con el enlace de recuperación y también cuando se cambia desde el panel
+#   de usuarios estando logueado. No es una cortesía, es una alerta de
+#   seguridad: si alguien ajeno cambió la contraseña, el dueño real de la
+#   cuenta se entera de inmediato y puede reaccionar.
+#   Nunca incluye la contraseña nueva.
+# ---------------------------------------------------------------------------
+
+MESES = ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+         'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre')
+
+
+def _zona_horaria():
+    """Hora de Colombia. Si el sistema no tiene la base de zonas horarias
+    (pasa en Windows sin el paquete tzdata), se usa UTC-5 fijo: Colombia no
+    cambia de hora en el año."""
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo('America/Bogota')
+    except Exception:
+        return timezone(timedelta(hours=-5))
+
+
+def _dispositivo(request: Request) -> str:
+    """Descripción corta del navegador y sistema desde el User-Agent, para que
+    el usuario reconozca si el cambio lo hizo él (ej. 'Chrome en Windows')."""
+    ua = request.headers.get('user-agent', '')
+    if not ua:
+        return 'Desconocido'
+    sistemas = (('iPhone', 'iPhone'), ('iPad', 'iPad'), ('Android', 'Android'),
+                ('Windows', 'Windows'), ('Mac OS', 'Mac'), ('Linux', 'Linux'))
+    navegadores = (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'),
+                   ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
+    sistema   = next((n for clave, n in sistemas if clave in ua), None)
+    navegador = next((n for clave, n in navegadores if clave in ua), None)
+    if navegador and sistema:
+        return f'{navegador} en {sistema}'
+    return navegador or sistema or 'Desconocido'
+
+
+def notificar_cambio_password(request: Request, user: dict, origen: str,
+                              destinatarios=None):
+    """Envía el aviso 'tu contraseña fue cambiada' al correo del usuario.
+    `origen` completa la frase 'se cambió el <fecha> a las <hora> ...'.
+    `destinatarios` permite avisar también al correo anterior cuando el
+    correo se cambió en la misma operación."""
+    correos = [c for c in (destinatarios or [user.get('email')]) if c]
+    if not correos:
+        return
+
+    ahora   = datetime.now(_zona_horaria())
+    app_url = os.getenv('APP_URL', str(request.base_url)).rstrip('/')
+    soporte = os.getenv('SOPORTE_EMAIL') or os.getenv('SMTP_FROM') or os.getenv('SMTP_USER') or ''
+    datos = {
+        'nombre':           user.get('nombre') or user.get('nombre_usuario'),
+        'nombre_usuario':   user.get('nombre_usuario'),
+        'fecha':            f'{ahora.day} de {MESES[ahora.month - 1]} de {ahora.year}',
+        'hora':             ahora.strftime('%H:%M'),
+        'origen':           origen,
+        'dispositivo':      _dispositivo(request),
+        'enlace_recuperar': f'{app_url}/recuperar',
+        'soporte':          soporte,
+    }
+    html = templates.get_template('emails/cambio_password.html').render(**datos)
+    texto = (
+        f"Hola {datos['nombre']},\n\n"
+        f"La contraseña de tu cuenta ({datos['nombre_usuario']}) se cambió el "
+        f"{datos['fecha']} a las {datos['hora']} {origen}.\n\n"
+        f"Dispositivo: {datos['dispositivo']}\n\n"
+        f"Si fuiste tú, no tienes que hacer nada.\n"
+        f"Si NO fuiste tú, asegura tu cuenta creando una contraseña nueva aquí:\n"
+        f"{datos['enlace_recuperar']}\n"
+    )
+    if soporte:
+        texto += f"También puedes escribir a soporte: {soporte}\n"
+    # dict.fromkeys quita repetidos conservando el orden (correo anterior primero)
+    for correo in dict.fromkeys(correos):
+        enviar_correo(correo, 'Tu contraseña fue cambiada · CanGuard K9', texto, html)
+
+
 @app.get('/restablecer', response_class=HTMLResponse)
 async def reset_page(request: Request, token: str = ''):
     token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
@@ -197,16 +596,147 @@ async def reset_post(request: Request,
 
     if not registro:
         return responder(None, valido=False)
-    if len(password) < 6:
-        return responder('La contraseña debe tener al menos 6 caracteres.')
+    error = validar_password(password)
+    if error:
+        return responder(error)
     if password != confirmar:
         return responder('Las contraseñas no coinciden.')
 
     usar_token_recuperacion(registro['id'], registro['id_usuario'], password)
+
+    # Segundo correo del flujo: aviso de que la contraseña ya cambió.
+    user = get_usuario_by_id(registro['id_usuario'])
+    if user:
+        notificar_cambio_password(request, user, 'usando el enlace de recuperación enviado a tu correo')
+
     return templates.TemplateResponse('login.html', {
         'request': request, 'error': None,
         'ok': 'Contraseña actualizada. Ya puede iniciar sesión.',
     })
+
+
+# ---------------------------------------------------------------------------
+# Activación de cuenta (usuarios creados por un administrador)
+#   1. El admin crea el usuario: nace en estado 'pendiente' con una contraseña
+#      temporal aleatoria que viaja en el correo de activación junto al enlace.
+#   2. GET  /activar?token=... -> formulario: contraseña temporal + nueva contraseña
+#   3. POST /activar           -> verifica token y temporal, guarda la nueva,
+#                                 pasa la cuenta a 'activo' y quema el token.
+#   Mientras esté pendiente no puede iniciar sesión. El admin puede reenviar la
+#   activación desde el panel y el usuario desde "¿Olvidó su clave?".
+# ---------------------------------------------------------------------------
+
+HORAS_ACTIVACION = 48
+
+
+def _puede_reenviar_activacion(id_usuario: int) -> str | None:
+    """Límite de reenvíos: uno por minuto y cinco por hora. Devuelve el motivo
+    si no se puede, o None si sí."""
+    if contar_tokens_recientes(id_usuario, 'activacion', 1) >= 1:
+        return 'Ya se envió un correo de activación hace menos de un minuto. Espera un momento.'
+    if contar_tokens_recientes(id_usuario, 'activacion', 60) >= 5:
+        return 'Se alcanzó el límite de reenvíos por hora para este usuario. Inténtalo más tarde.'
+    return None
+
+
+def enviar_activacion(request: Request, user: dict, password_temporal: str | None = None) -> bool:
+    """Genera (si no se pasa) la contraseña temporal, el token de activación y
+    envía el correo "activa tu cuenta". Devuelve True si el correo salió."""
+    if not user.get('email'):
+        return False
+    if password_temporal is None:
+        password_temporal = generar_password_temporal()
+        set_password_temporal(user['id'], password_temporal)
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+    crear_token_recuperacion(user['id'], token_hash, HORAS_ACTIVACION * 60,
+                             _ip_cliente(request), tipo='activacion')
+
+    app_url = os.getenv('APP_URL', str(request.base_url)).rstrip('/')
+    entidad = get_entidad_by_id(user['id_entidad']) if user.get('id_entidad') else None
+    datos = {
+        'nombre': user['nombre'], 'nombre_usuario': user['nombre_usuario'],
+        'password_temporal': password_temporal,
+        'enlace': f'{app_url}/activar?token={token}', 'horas': HORAS_ACTIVACION,
+        'nombre_entidad': entidad['razon_social'] if entidad else None,
+        'reglas': REGLAS_PASSWORD,
+    }
+    html = templates.get_template('emails/activacion.html').render(**datos)
+    texto = (
+        f"Hola {datos['nombre']},\n\n"
+        f"Se creó una cuenta para ti en CanGuard K9"
+        + (f" para la entidad {datos['nombre_entidad']}" if datos['nombre_entidad'] else '')
+        + ". Este correo se envió únicamente a ti.\n\n"
+        f"Usuario: {datos['nombre_usuario']}\n"
+        f"Contraseña temporal: {password_temporal}\n\n"
+        f"Esta contraseña es temporal. Para activar tu cuenta debes cambiarla ahora en este enlace "
+        f"(vence en {HORAS_ACTIVACION} horas):\n{datos['enlace']}\n\n"
+        f"Tu nueva contraseña debe cumplir: {REGLAS_PASSWORD}\n\n"
+        f"Después de crear la contraseña vincularás la app Google Authenticator de tu celular: "
+        f"la verificación en dos pasos es obligatoria en CanGuard.\n\n"
+        f"Si no esperabas una cuenta en CanGuard, ignora este correo."
+    )
+    return enviar_correo(user['email'], 'Activa tu cuenta · CanGuard K9', texto, html)
+
+
+def _contexto_activar(request: Request, token: str, registro, error=None):
+    user = get_usuario_by_id(registro['id_usuario']) if registro else None
+    return {
+        'request': request, 'token': token, 'valido': bool(user), 'error': error,
+        'nombre': user['nombre'] if user else '', 'nombre_usuario': user['nombre_usuario'] if user else '',
+    }
+
+
+@app.get('/activar', response_class=HTMLResponse)
+async def activar_page(request: Request, token: str = ''):
+    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+    registro = get_token_recuperacion_valido(token_hash, tipo='activacion') if token else None
+    return templates.TemplateResponse('activar.html', _contexto_activar(request, token, registro))
+
+
+@app.post('/activar', response_class=HTMLResponse)
+async def activar_post(request: Request,
+                       token: str = Form(...),
+                       password_temporal: str = Form(...),
+                       password: str = Form(...),
+                       confirmar: str = Form(...)):
+    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+    registro = get_token_recuperacion_valido(token_hash, tipo='activacion')
+
+    def responder(error):
+        return templates.TemplateResponse('activar.html',
+                                          _contexto_activar(request, token, registro, error), status_code=400)
+
+    if not registro:
+        return responder(None)
+    user = get_usuario_by_id(registro['id_usuario'])
+    if not user or user.get('estado') != 'pendiente':
+        return responder('Esta cuenta ya fue activada. Inicia sesión con tu contraseña.')
+    # Freno por IP también aquí: el enlace y la temporal no deben poder adivinarse a fuerza bruta.
+    if not limitador_login.permitir(_ip_cliente(request), 30, 300):
+        return responder('Demasiados intentos. Espera unos minutos e inténtalo de nuevo.')
+    if not verify_user(user['nombre_usuario'], password_temporal):
+        return responder('La contraseña temporal no es correcta. Revisa el correo de activación.')
+    error = validar_password(password)
+    if error:
+        return responder(error)
+    if password == password_temporal:
+        return responder('La nueva contraseña no puede ser igual a la temporal.')
+    if password != confirmar:
+        return responder('Las contraseñas no coinciden.')
+
+    activar_usuario(registro['id'], user['id'], password)
+    # Último paso de la activación: vincular Google Authenticator. Se deja el
+    # secreto listo y se abre sesión; el middleware solo permite /seguridad
+    # hasta que confirme el código.
+    guardar_totp_pendiente(user['id'], f2a.cifrar_secreto(f2a.generar_secreto()))
+    user = get_usuario_by_id(user['id'])
+    notificar_cambio_password(request, user, 'al activar tu cuenta')
+    _completar_login(request, user)
+    request.session['flash_seguridad'] = ('Contraseña creada. Último paso: vincula la app de autenticación '
+                                          'de tu celular para terminar de activar la cuenta.')
+    return RedirectResponse(url='/seguridad', status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -222,11 +752,20 @@ async def index_page(request: Request):
     es_sa  = es_super_admin(request)
     id_ent = None if es_sa else request.session.get('id_entidad')
 
-    caninos          = get_all_caninos(id_entidad=id_ent)              or []
-    guias            = get_guias_caninos(id_entidad=id_ent)            or []
-    sesiones_por_esp = count_sesiones_por_especialidad(id_entidad=id_ent) or {}
-    vision_archs     = get_all_vision_archivos(id_entidad=id_ent)      or []
-    usuarios         = get_all_usuarios(id_entidad=id_ent)             or []
+    if es_guia(request):
+        # El guía ve solo sus caninos y las sesiones que él registró
+        uid = id_usuario_sesion(request)
+        caninos          = get_all_caninos(id_guia=uid)                    or []
+        guias            = []
+        sesiones_por_esp = count_sesiones_por_especialidad(id_usuario=uid) or {}
+        vision_archs     = get_all_vision_archivos(id_usuario=uid)         or []
+        usuarios         = []
+    else:
+        caninos          = get_all_caninos(id_entidad=id_ent)              or []
+        guias            = get_guias_caninos(id_entidad=id_ent)            or []
+        sesiones_por_esp = count_sesiones_por_especialidad(id_entidad=id_ent) or {}
+        vision_archs     = get_all_vision_archivos(id_entidad=id_ent)      or []
+        usuarios         = get_all_usuarios(id_entidad=id_ent)             or []
 
     total_sesiones  = sum(sesiones_por_esp.values()) if sesiones_por_esp else 0
     total_vision    = len(vision_archs)
@@ -485,7 +1024,7 @@ async def eliminar_entidad_post(request: Request, id_ent: int, Volver: str = For
 
 @app.get('/usuarios', response_class=HTMLResponse)
 async def listar_usuarios(request: Request):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
     if es_super_admin(request):
@@ -514,12 +1053,13 @@ async def listar_usuarios(request: Request):
         flash_nuevo=flash_nuevo,
         form_error=form_error,
         flash_edit_id=flash_edit_id,
+        flash_ok=request.session.pop('flash_ok', None),
     ))
 
 
 @app.get('/usuarios/nuevo', response_class=HTMLResponse)
 async def nuevo_usuario_form(request: Request):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
     return RedirectResponse(url='/usuarios', status_code=302)
@@ -533,8 +1073,6 @@ async def nuevo_usuario_post(
     documento:       str        = Form(...),
     email:           str        = Form(...),
     telefono:        str        = Form(''),
-    password:        str        = Form(...),
-    password2:       str        = Form(...),
     rol:             str        = Form('admin_entidad'),
     id_entidad:      str        = Form(''),
     tipo_documento:  str        = Form(''),
@@ -542,7 +1080,7 @@ async def nuevo_usuario_post(
     doc_identidad:   Optional[UploadFile] = File(None),
     foto_perfil:     Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
 
@@ -550,10 +1088,12 @@ async def nuevo_usuario_post(
         request.session['flash_form_error'] = msg
         return RedirectResponse(url='/usuarios', status_code=303)
 
-    if password != password2:
-        return _err('Las contraseñas no coinciden.')
-    if len(password) < 6:
-        return _err('La contraseña debe tener al menos 6 caracteres.')
+    # El administrador ya no escribe la contraseña: el sistema genera una
+    # temporal, se la envía al correo del usuario y este debe cambiarla para
+    # activar la cuenta (ver "Activación de cuenta" más arriba).
+    email = email.strip()
+    if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        return _err('El correo no tiene un formato válido.')
     if not nombre_usuario or len(nombre_usuario) < 3:
         return _err('El nombre de usuario debe tener al menos 3 caracteres.')
     if username_existe(nombre_usuario):
@@ -567,7 +1107,8 @@ async def nuevo_usuario_post(
 
     if not es_super_admin(request):
         id_entidad = str(request.session.get('id_entidad') or '')
-        rol = 'admin_entidad'
+        # Un admin de entidad puede crear admins, instructores y guías de SU entidad
+        rol = rol if rol in ROLES_ENTIDAD else 'admin_entidad'
 
     # Guardar foto de perfil
     foto_path = None
@@ -590,16 +1131,24 @@ async def nuevo_usuario_post(
         doc_path = f'docs/{documento}/doc{ext}'
 
     id_ent_int = int(id_entidad) if id_entidad else None
-    create_usuario(nombre, nombre_usuario, documento, email, telefono, password, rol,
-                   id_ent_int, tipo_documento or None, doc_path, nacionalidad, foto_path)
+    password_temporal = generar_password_temporal()
+    id_nuevo = create_usuario(nombre, nombre_usuario, documento, email, telefono, password_temporal, rol,
+                              id_ent_int, tipo_documento or None, doc_path, nacionalidad, foto_path,
+                              estado='pendiente')
 
-    # Flash: super_admin ve las credenciales en texto claro una sola vez
-    if es_super_admin(request):
-        request.session['flash_nuevo_usuario'] = {
-            'nombre':         nombre,
-            'nombre_usuario': nombre_usuario,
-            'password':       password,
-        }
+    nuevo = get_usuario_by_id(id_nuevo) if isinstance(id_nuevo, int) else None
+    if not nuevo:
+        nuevo = get_user_by_username(nombre_usuario)
+    enviado = enviar_activacion(request, nuevo, password_temporal) if nuevo else False
+
+    # Flash: el panel confirma a quién se envió el correo de activación.
+    # La contraseña temporal NO se muestra en pantalla: solo la recibe el usuario.
+    request.session['flash_nuevo_usuario'] = {
+        'nombre':         nombre,
+        'nombre_usuario': nombre_usuario,
+        'email':          email,
+        'enviado':        bool(enviado),
+    }
 
     return RedirectResponse(url='/usuarios', status_code=303)
 
@@ -618,9 +1167,18 @@ async def editar_usuario_post(
     id_entidad:      str        = Form(''),
     foto_perfil:     Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
+    # Se consulta ANTES de guardar: sirve para validar la entidad y, si cambia
+    # la contraseña, para avisar al correo que tenía la cuenta hasta ahora.
+    objetivo = get_usuario_by_id(id_usr)
+    if not objetivo:
+        return RedirectResponse(url='/usuarios', status_code=303)
+    # Un admin de entidad solo puede modificar usuarios de su propia entidad
+    if not es_super_admin(request):
+        if objetivo.get('id_entidad') != request.session.get('id_entidad'):
+            return RedirectResponse(url='/usuarios', status_code=303)
 
     def _err(msg):
         request.session['flash_form_error'] = msg
@@ -629,8 +1187,8 @@ async def editar_usuario_post(
 
     if password and password != password2:
         return _err('Las contraseñas no coinciden.')
-    if password and len(password) < 6:
-        return _err('La contraseña debe tener al menos 6 caracteres.')
+    if password and validar_password(password):
+        return _err(validar_password(password))
     if username_existe_otro(nombre_usuario, id_usr):
         return _err(f'El nombre de usuario "{nombre_usuario}" ya está en uso.')
     if email_existe_otro(email, id_usr):
@@ -645,7 +1203,11 @@ async def editar_usuario_post(
             shutil.copyfileobj(foto_perfil.file, fd)
         foto_path = f'images/usuarios/{nombre_usuario}/foto{ext}'
 
-    rol_final     = rol if (rol and es_super_admin(request)) else None
+    # El super admin asigna cualquier rol; el admin de entidad, solo los de su entidad
+    if es_super_admin(request):
+        rol_final = rol or None
+    else:
+        rol_final = rol if rol in ROLES_ENTIDAD else None
     id_ent_final  = (int(id_entidad) if id_entidad else None) if es_super_admin(request) else False
 
     update_usuario(
@@ -655,14 +1217,91 @@ async def editar_usuario_post(
         id_entidad      = id_ent_final,
         foto_perfil_path= foto_path,
     )
+
+    if password:
+        # Aviso de seguridad también cuando el cambio se hace estando logueado.
+        # Si en la misma edición cambió el correo, se avisa al correo anterior
+        # y al nuevo: así el dueño real se entera aunque le hayan cambiado ambos.
+        if id_usr == id_usuario_sesion(request):
+            origen = 'desde tu propio perfil en el panel de usuarios'
+        else:
+            quien  = request.session.get('nombre_usuario') or 'un administrador'
+            origen = f'desde el panel de administración por {quien}'
+        user_actual = get_usuario_by_id(id_usr) or objetivo
+        notificar_cambio_password(request, user_actual, origen,
+                                  destinatarios=[objetivo.get('email'), user_actual.get('email')])
+
+    return RedirectResponse(url='/usuarios', status_code=303)
+
+
+@app.post('/usuarios/{id_usr}/reenviar-activacion')
+async def reenviar_activacion_post(request: Request, id_usr: int):
+    """Genera una contraseña temporal nueva y vuelve a enviar el correo de
+    activación a un usuario que todavía está 'pendiente'."""
+    r = redirigir_si_guia(request)
+    if r:
+        return r
+    objetivo = get_usuario_by_id(id_usr)
+    if not objetivo or (not es_super_admin(request)
+                        and objetivo.get('id_entidad') != request.session.get('id_entidad')):
+        return RedirectResponse(url='/usuarios', status_code=303)
+    if objetivo.get('estado') != 'pendiente':
+        request.session['flash_form_error'] = 'Ese usuario ya activó su cuenta; no hace falta reenviar.'
+        return RedirectResponse(url='/usuarios', status_code=303)
+    motivo = _puede_reenviar_activacion(id_usr)
+    if motivo:
+        request.session['flash_form_error'] = motivo
+        return RedirectResponse(url='/usuarios', status_code=303)
+    if enviar_activacion(request, objetivo):
+        request.session['flash_ok'] = {
+            'titulo': 'Activación reenviada',
+            'texto':  f"Se envió un nuevo correo de activación a {objetivo['email']}. "
+                      f"La contraseña temporal anterior ya no sirve.",
+        }
+    else:
+        request.session['flash_form_error'] = 'No se pudo enviar el correo. Revisa la configuración SMTP.'
+    return RedirectResponse(url='/usuarios', status_code=303)
+
+
+@app.post('/usuarios/{id_usr}/quitar-2fa')
+async def quitar_2fa_post(request: Request, id_usr: int):
+    """Para un usuario que perdió el celular y los códigos de respaldo: el
+    administrador le quita la verificación en dos pasos y se le avisa por correo."""
+    r = redirigir_si_guia(request)
+    if r:
+        return r
+    objetivo = get_usuario_by_id(id_usr)
+    if not objetivo or (not es_super_admin(request)
+                        and objetivo.get('id_entidad') != request.session.get('id_entidad')):
+        return RedirectResponse(url='/usuarios', status_code=303)
+    if not objetivo.get('totp_activo'):
+        request.session['flash_form_error'] = 'Ese usuario no tiene activa la verificación en dos pasos.'
+        return RedirectResponse(url='/usuarios', status_code=303)
+    desactivar_totp(id_usr)
+    quien = request.session.get('nombre_usuario') or 'un administrador'
+    enviar_aviso_seguridad(request, objetivo, 'Se desactivó tu verificación en dos pasos',
+                           'Verificación en dos pasos desactivada por un administrador', [
+        f'{quien} desactivó la verificación en dos pasos de tu cuenta desde el panel de administración.',
+        'La próxima vez que inicies sesión deberás vincular de nuevo la app de autenticación.',
+    ])
+    request.session['flash_ok'] = {
+        'titulo': 'Verificación en dos pasos reiniciada',
+        'texto':  f"{objetivo['nombre']} podrá entrar con su contraseña y tendrá que vincular la app de nuevo. "
+                  f"Se le avisó a {objetivo['email']}.",
+    }
     return RedirectResponse(url='/usuarios', status_code=303)
 
 
 @app.post('/usuarios/{id_usr}/eliminar')
 async def eliminar_usuario_post(request: Request, id_usr: int):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
+    # Un admin de entidad solo puede modificar usuarios de su propia entidad
+    if not es_super_admin(request):
+        objetivo = get_usuario_by_id(id_usr)
+        if not objetivo or objetivo.get('id_entidad') != request.session.get('id_entidad'):
+            return RedirectResponse(url='/usuarios', status_code=303)
     delete_usuario(id_usr)
     return RedirectResponse(url='/usuarios', status_code=303)
 
@@ -693,6 +1332,11 @@ async def listar_caninos(request: Request):
         caninos   = get_all_caninos(incluir_baja=True) or []
         entidades = get_all_entidades() or []
         guias     = get_guias_caninos() or []
+    elif es_guia(request):
+        # Mis caninos: solo los asignados al guía (en modo consulta)
+        caninos   = get_all_caninos(id_guia=id_usuario_sesion(request), incluir_baja=True) or []
+        entidades = []
+        guias     = []
     else:
         id_ent    = request.session.get('id_entidad')
         caninos   = get_all_caninos(id_entidad=id_ent, incluir_baja=True) or []
@@ -746,7 +1390,7 @@ async def nuevo_canino_post(
     observaciones:      str  = Form(''),
     foto_canino:        Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
 
@@ -810,7 +1454,7 @@ async def editar_canino_post(
     observaciones:      str  = Form(''),
     foto_canino:        Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
 
@@ -856,7 +1500,7 @@ async def dar_baja_canino_post(
     fecha_baja:        str = Form(...),
     carta_baja:        Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
 
@@ -904,6 +1548,9 @@ async def salud_canina_page(request: Request):
     if es_super_admin(request):
         caninos   = get_all_caninos() or []
         entidades = get_all_entidades() or []
+    elif es_guia(request):
+        caninos   = get_all_caninos(id_guia=id_usuario_sesion(request)) or []
+        entidades = []
     else:
         caninos   = get_all_caninos(id_entidad=request.session.get('id_entidad')) or []
         entidades = []
@@ -958,6 +1605,8 @@ async def agregar_vacuna_post(
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not canino_es_del_guia(id_can, id_usuario_sesion(request)):
+        return RedirectResponse(url='/salud-canina', status_code=303)
 
     comprobante_path = None
     if comprobante and comprobante.filename:
@@ -984,6 +1633,8 @@ async def eliminar_vacuna_post(request: Request, id_vac: int):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not canino_es_del_guia(get_id_canino_de_vacuna(id_vac), id_usuario_sesion(request)):
+        return RedirectResponse(url='/salud-canina', status_code=303)
     delete_vacuna_canino(id_vac)
     return RedirectResponse(url='/salud-canina', status_code=303)
 
@@ -997,6 +1648,8 @@ async def subir_historial_post(
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not canino_es_del_guia(id_can, id_usuario_sesion(request)):
+        return RedirectResponse(url='/salud-canina', status_code=303)
     if historial and historial.filename:
         ext     = os.path.splitext(historial.filename)[1].lower()
         carpeta = os.path.join(BASE_DIR, 'static', 'docs', 'caninos', str(id_can))
@@ -1037,10 +1690,13 @@ def _calcular_alertas(caninos: list, vac_map: dict) -> list:
 
 @app.get('/api/notificaciones/count')
 async def api_notif_count(request: Request):
-    if not request.session.get('usuario_id'):
+    # Antes se buscaba 'usuario_id', que la sesión nunca guarda: el contador daba siempre 0
+    if not es_sesion_valida(request):
         return JSONResponse({'count': 0, 'items': []})
     if es_super_admin(request):
         caninos = get_all_caninos() or []
+    elif es_guia(request):
+        caninos = get_all_caninos(id_guia=id_usuario_sesion(request)) or []
     else:
         caninos = get_all_caninos(id_entidad=request.session.get('id_entidad')) or []
     ids     = [c['id'] for c in caninos]
@@ -1057,6 +1713,9 @@ async def notificaciones_page(request: Request):
     if es_super_admin(request):
         caninos   = get_all_caninos() or []
         entidades = get_all_entidades() or []
+    elif es_guia(request):
+        caninos   = get_all_caninos(id_guia=id_usuario_sesion(request)) or []
+        entidades = []
     else:
         caninos   = get_all_caninos(id_entidad=request.session.get('id_entidad')) or []
         entidades = []
@@ -1076,7 +1735,7 @@ async def notificaciones_page(request: Request):
 
 @app.get('/gestion-guias', response_class=HTMLResponse)
 async def ver_registro_guias(request: Request):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
     if es_super_admin(request):
@@ -1102,7 +1761,7 @@ async def vision_artificial(request: Request):
     if r:
         return r
     id_ent = None if es_super_admin(request) else request.session.get('id_entidad')
-    archivos  = get_all_vision_archivos(id_ent)
+    archivos  = get_all_vision_archivos(id_ent, id_usuario_sesion(request) if es_guia(request) else None)
     flash_ok  = request.session.get('flash_vision_ok')
     if flash_ok:
         del request.session['flash_vision_ok']
@@ -1130,7 +1789,7 @@ async def cursos_page(request: Request):
     id_ent = None if es_super_admin(request) else request.session.get('id_entidad')
 
     programas = get_all_programas()
-    conteos   = count_sesiones_por_especialidad(id_ent)
+    conteos   = count_sesiones_por_especialidad(id_ent, id_usuario_sesion(request) if es_guia(request) else None)
 
     flash_ok = request.session.get('flash_curso_ok')
     if flash_ok:
@@ -1154,11 +1813,18 @@ async def cursos_sesiones_page(request: Request, esp: str):
     if not curso:
         return RedirectResponse('/cursos', status_code=303)
 
-    sesiones  = get_sesiones_by_especialidad(esp, id_ent) or []
+    sesiones  = get_sesiones_by_especialidad(
+        esp, id_ent, id_usuario_sesion(request) if es_guia(request) else None) or []
     if es_super_admin(request):
         caninos   = get_all_caninos() or []
         entidades = get_all_entidades() or []
         guias     = get_guias_caninos() or []
+    elif es_guia(request):
+        # El guía registra sesiones solo de sus caninos y queda él como guía
+        uid       = id_usuario_sesion(request)
+        caninos   = get_all_caninos(id_guia=uid) or []
+        entidades = []
+        guias     = [g for g in (get_guias_caninos(id_entidad=id_ent) or []) if g['id'] == uid]
     else:
         caninos   = get_all_caninos(id_entidad=id_ent) or []
         entidades = []
@@ -1188,7 +1854,7 @@ async def crear_programa_post(
     color:         str = Form('#b8860b'),
     imagen_fondo:  Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
     if not es_super_admin(request):
@@ -1219,7 +1885,7 @@ async def editar_programa_post(
     color:        str = Form('#b8860b'),
     imagen_fondo: Optional[UploadFile] = File(None),
 ):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
     if not es_super_admin(request):
@@ -1241,7 +1907,7 @@ async def editar_programa_post(
 
 @app.post('/cursos/programa/{id_prog}/eliminar')
 async def eliminar_programa_post(request: Request, id_prog: int):
-    r = redirigir_si_no_autenticado(request)
+    r = redirigir_si_guia(request)
     if r:
         return r
     if not es_super_admin(request):
@@ -1266,8 +1932,14 @@ async def crear_sesion_post(
     if r:
         return r
     id_ent_final = int(id_entidad) if id_entidad else request.session.get('id_entidad')
+    if es_guia(request):
+        # El guía solo registra sesiones de sus caninos y en su propia entidad
+        if not canino_es_del_guia(id_canino, id_usuario_sesion(request)):
+            return RedirectResponse(f'/cursos/{esp}/sesiones', status_code=303)
+        id_ent_final = request.session.get('id_entidad')
     create_sesion_curso(esp, id_canino, id_ent_final, fecha,
-                        resultado or None, observaciones or None, instructor or None)
+                        resultado or None, observaciones or None, instructor or None,
+                        id_usuario_registra=id_usuario_sesion(request))
     request.session['flash_curso_ok'] = 'Sesión registrada correctamente.'
     return RedirectResponse(f'/cursos/{esp}/sesiones', status_code=303)
 
@@ -1284,6 +1956,8 @@ async def editar_sesion_post(
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(id_ses, id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     update_sesion_curso(id_ses, fecha, resultado, observaciones, instructor)
     request.session['flash_curso_ok'] = 'Sesión actualizada correctamente.'
     referer = request.headers.get('referer', '/cursos')
@@ -1311,6 +1985,8 @@ async def vision_page(request: Request, esp: str, id_ses: int):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(id_ses, id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     sesion   = get_sesion_by_id(id_ses)
     if not sesion:
         return RedirectResponse(f'/cursos/{esp}/sesiones', status_code=303)
@@ -1344,6 +2020,8 @@ async def vision_upload(
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(id_ses, id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     import time as _time
     ext = os.path.splitext(archivo.filename)[1].lower()
     # Solo se aceptan videos y audios (lo que se puede transcribir); las imágenes no.
@@ -1402,6 +2080,8 @@ async def transcribir_ajax(request: Request, id_arch: int):
     r = redirigir_si_no_autenticado(request)
     if r:
         return JSONResponse({'ok': False, 'error': 'No autenticado'}, status_code=401)
+    if es_guia(request) and not sesion_es_del_usuario(get_id_sesion_de_archivo(id_arch), id_usuario_sesion(request)):
+        return JSONResponse({'ok': False, 'error': 'No tiene permiso sobre este archivo'}, status_code=403)
     from .models import _query as _mq
     arch = _mq(
         "SELECT ArchivoPath AS archivo_path FROM RegistroDocumental WHERE IdRegistroDocumental=%s",
@@ -1425,6 +2105,8 @@ async def vision_guardar_notas(request: Request, id_arch: int, texto: str = Form
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(get_id_sesion_de_archivo(id_arch), id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     from .models import _query as _mq
     _mq("UPDATE RegistroDocumental SET Transcripcion=%s WHERE IdRegistroDocumental=%s", (texto or None, id_arch), write=True)
     # Se vuelve a la página de la sesión SIN parámetros (?review=1...): así el cuadro
@@ -1448,6 +2130,8 @@ async def vision_eliminar(request: Request, id_arch: int):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(get_id_sesion_de_archivo(id_arch), id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     from .models import _query as _mq
     rows = _mq("SELECT ArchivoPath AS archivo_path FROM RegistroDocumental WHERE IdRegistroDocumental=%s", (id_arch,))
     if rows:
@@ -1471,6 +2155,8 @@ async def transcribir_vision(request: Request, esp: str, id_ses: int,
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(id_ses, id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     from .models import _query as _mq
     arch = _mq(
         "SELECT ArchivoPath AS archivo_path FROM RegistroDocumental WHERE IdRegistroDocumental=%s",
@@ -1503,6 +2189,8 @@ async def exportar_word_archivo(request: Request, id_arch: int):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(get_id_sesion_de_archivo(id_arch), id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     from .models import _query as _mq
     arch = _mq("""
         SELECT rd.ArchivoPath AS archivo_path, rd.TipoArchivo AS tipo, rd.Transcripcion AS notas,
@@ -1616,6 +2304,8 @@ async def exportar_word(request: Request, esp: str, id_ses: int):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
+    if es_guia(request) and not sesion_es_del_usuario(id_ses, id_usuario_sesion(request)):
+        return RedirectResponse('/cursos', status_code=303)
     sesion   = get_sesion_by_id(id_ses)
     archivos = get_vision_archivos(id_ses)
     curso    = get_programa_by_clave(esp)

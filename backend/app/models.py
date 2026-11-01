@@ -13,6 +13,7 @@
 # de siempre. Los INSERT/UPDATE sí usan directamente los nombres nuevos
 # de columna, que es lo que realmente exige la base de datos.
 import hashlib
+import bcrypt
 from datetime import date
 from .database import get_db_connection
 
@@ -22,7 +23,24 @@ from .database import get_db_connection
 # ─────────────────────────────────────────────
 
 def _hash_password(plain: str) -> str:
-    return hashlib.sha256(plain.encode('utf-8')).hexdigest()
+    """bcrypt: hash con sal y lento a propósito, para que una copia de la base
+    no sirva para adivinar contraseñas. bcrypt solo mira los primeros 72 bytes."""
+    return bcrypt.hashpw(plain.encode('utf-8')[:72], bcrypt.gensalt()).decode('ascii')
+
+def _es_hash_legado(password_hash: str) -> bool:
+    """Las contraseñas guardadas antes de bcrypt eran SHA-256 en hexadecimal (64 chars)."""
+    return bool(password_hash) and len(password_hash) == 64 and all(c in '0123456789abcdef' for c in password_hash)
+
+def verificar_password(plain: str, password_hash: str) -> bool:
+    """Compara la contraseña en claro con el hash guardado (bcrypt o SHA-256 legado)."""
+    if not plain or not password_hash:
+        return False
+    if _es_hash_legado(password_hash):
+        return hashlib.sha256(plain.encode('utf-8')).hexdigest() == password_hash
+    try:
+        return bcrypt.checkpw(plain.encode('utf-8')[:72], password_hash.encode('ascii'))
+    except ValueError:
+        return False
 
 def _query(sql: str, params=(), one=False, write=False):
     """Ejecuta una query y devuelve dict(s) o el id insertado/rowcount."""
@@ -134,13 +152,19 @@ _CAMPOS_USUARIO = """IdUsuario AS id, IdEntidad AS id_entidad, Rol AS rol,
     Nombre AS nombre, NombreUsuario AS nombre_usuario, TipoDocumento AS tipo_documento,
     Documento AS documento, Nacionalidad AS nacionalidad, Email AS email, Telefono AS telefono,
     PasswordHash AS password_hash, FotoPerfilPath AS foto_perfil_path,
-    DocIdentidadPath AS doc_identidad_path, Estado AS estado"""
+    DocIdentidadPath AS doc_identidad_path, Estado AS estado, FechaRegistro AS fecha_registro,
+    (BloqueadoHasta IS NOT NULL AND BloqueadoHasta > NOW()) AS bloqueado_temporal,
+    CEIL(GREATEST(EXTRACT(EPOCH FROM (BloqueadoHasta - NOW())), 0) / 60) AS minutos_bloqueo,
+    TotpSecret AS totp_secret, TotpActivo AS totp_activo, TotpUltimoIntervalo AS totp_ultimo_intervalo"""
 
 _CAMPOS_USUARIO_JOIN = """u.IdUsuario AS id, u.IdEntidad AS id_entidad, u.Rol AS rol,
     u.Nombre AS nombre, u.NombreUsuario AS nombre_usuario, u.TipoDocumento AS tipo_documento,
     u.Documento AS documento, u.Nacionalidad AS nacionalidad, u.Email AS email, u.Telefono AS telefono,
     u.PasswordHash AS password_hash, u.FotoPerfilPath AS foto_perfil_path,
-    u.DocIdentidadPath AS doc_identidad_path, u.Estado AS estado"""
+    u.DocIdentidadPath AS doc_identidad_path, u.Estado AS estado, u.FechaRegistro AS fecha_registro,
+    (u.BloqueadoHasta IS NOT NULL AND u.BloqueadoHasta > NOW()) AS bloqueado_temporal,
+    CEIL(GREATEST(EXTRACT(EPOCH FROM (u.BloqueadoHasta - NOW())), 0) / 60) AS minutos_bloqueo,
+    u.TotpSecret AS totp_secret, u.TotpActivo AS totp_activo, u.TotpUltimoIntervalo AS totp_ultimo_intervalo"""
 
 def _id_rol_por_clave(clave: str):
     """Busca el IdRol correspondiente a una Clave de Rol (super_admin, admin_entidad, ...).
@@ -177,10 +201,36 @@ def get_user_by_username(nombre_usuario: str):
     return _query(f"SELECT {_CAMPOS_USUARIO} FROM Usuario WHERE NombreUsuario = %s", (nombre_usuario,), one=True)
 
 def verify_user(nombre_usuario: str, password: str):
+    """Devuelve el usuario si la contraseña es correcta; si no, None.
+    Si el hash guardado todavía es SHA-256, se vuelve a guardar en bcrypt
+    aprovechando que en este momento tenemos la contraseña en claro."""
     user = get_user_by_username(nombre_usuario)
-    if user and user.get('password_hash') == _hash_password(password):
+    if user and verificar_password(password, user.get('password_hash')):
+        if _es_hash_legado(user['password_hash']):
+            _query("UPDATE Usuario SET PasswordHash = %s WHERE IdUsuario = %s",
+                   (_hash_password(password), user['id']), write=True)
         return user
     return None
+
+# ─── Bloqueo por intentos fallidos (columnas IntentosFallidos / BloqueadoHasta) ──
+
+def registrar_login_fallido(id_usuario: int, max_intentos: int, minutos_bloqueo: int) -> bool:
+    """Suma un intento fallido. Al llegar al máximo bloquea la cuenta por
+    `minutos_bloqueo` y reinicia el contador. Devuelve True si quedó bloqueada."""
+    _query("UPDATE Usuario SET IntentosFallidos = IntentosFallidos + 1 WHERE IdUsuario = %s",
+           (id_usuario,), write=True)
+    fila = _query("SELECT IntentosFallidos AS intentos FROM Usuario WHERE IdUsuario = %s",
+                  (id_usuario,), one=True)
+    if fila and fila['intentos'] >= max_intentos:
+        _query("""UPDATE Usuario SET BloqueadoHasta = NOW() + %s * INTERVAL '1 minute',
+                                     IntentosFallidos = 0
+                   WHERE IdUsuario = %s""", (minutos_bloqueo, id_usuario), write=True)
+        return True
+    return False
+
+def registrar_login_ok(id_usuario: int):
+    _query("""UPDATE Usuario SET IntentosFallidos = 0, BloqueadoHasta = NULL, UltimoAcceso = NOW()
+               WHERE IdUsuario = %s""", (id_usuario,), write=True)
 
 # ─── Recuperación de contraseña (tabla TokenRecuperacion) ───────────────────
 # En la base solo se guarda el SHA-256 del token, nunca el token en claro:
@@ -192,35 +242,123 @@ def get_user_by_username_o_email(identificador: str):
         (identificador, identificador), one=True
     )
 
-def crear_token_recuperacion(id_usuario: int, token_hash: str, minutos: int, ip: str = None):
-    # Se invalidan los tokens anteriores sin usar: solo vale el último enlace enviado.
-    _query("UPDATE TokenRecuperacion SET UsadoEn = NOW() WHERE IdUsuario = %s AND UsadoEn IS NULL",
-           (id_usuario,), write=True)
+def crear_token_recuperacion(id_usuario: int, token_hash: str, minutos: int, ip: str = None,
+                             tipo: str = 'recuperacion'):
+    """tipo: 'recuperacion' (olvidé mi contraseña) o 'activacion' (usuario nuevo)."""
+    # Se invalidan los tokens anteriores del mismo tipo sin usar: solo vale el último enlace enviado.
+    _query("""UPDATE TokenRecuperacion SET UsadoEn = NOW()
+               WHERE IdUsuario = %s AND Tipo = %s AND UsadoEn IS NULL""",
+           (id_usuario, tipo), write=True)
     return _query(
-        """INSERT INTO TokenRecuperacion (IdUsuario, TokenHash, ExpiraEn, IpSolicitud)
-           VALUES (%s, %s, NOW() + %s * INTERVAL '1 minute', %s)""",
-        (id_usuario, token_hash, minutos, ip), write=True
+        """INSERT INTO TokenRecuperacion (IdUsuario, TokenHash, ExpiraEn, IpSolicitud, Tipo)
+           VALUES (%s, %s, NOW() + %s * INTERVAL '1 minute', %s, %s)""",
+        (id_usuario, token_hash, minutos, ip, tipo), write=True
     )
 
-def get_token_recuperacion_valido(token_hash: str):
-    """Devuelve el token si existe, no se ha usado y no ha vencido; si no, None."""
+def get_token_recuperacion_valido(token_hash: str, tipo: str = 'recuperacion'):
+    """Devuelve el token si existe, es del tipo pedido, no se ha usado y no ha vencido; si no, None."""
     return _query(
         """SELECT IdTokenRecuperacion AS id, IdUsuario AS id_usuario
              FROM TokenRecuperacion
-            WHERE TokenHash = %s AND UsadoEn IS NULL AND ExpiraEn > NOW()""",
-        (token_hash,), one=True
+            WHERE TokenHash = %s AND Tipo = %s AND UsadoEn IS NULL AND ExpiraEn > NOW()""",
+        (token_hash, tipo), one=True
     )
+
+def contar_tokens_recientes(id_usuario: int, tipo: str, minutos: int) -> int:
+    """Cuántos correos de este tipo se le enviaron al usuario en los últimos
+    `minutos`. Sirve para limitar los reenvíos (uno por minuto, pocos por hora)."""
+    fila = _query(
+        """SELECT COUNT(*) AS n FROM TokenRecuperacion
+            WHERE IdUsuario = %s AND Tipo = %s
+              AND FechaRegistro > NOW() - %s * INTERVAL '1 minute'""",
+        (id_usuario, tipo, minutos), one=True
+    )
+    return int(fila['n']) if fila else 0
 
 def usar_token_recuperacion(id_token: int, id_usuario: int, nueva_password: str):
     """Cambia la contraseña, marca el token como usado y desbloquea la cuenta."""
-    _query("UPDATE Usuario SET PasswordHash = %s, IntentosFallidos = 0 WHERE IdUsuario = %s",
+    _query("""UPDATE Usuario SET PasswordHash = %s, IntentosFallidos = 0, BloqueadoHasta = NULL
+               WHERE IdUsuario = %s""",
            (_hash_password(nueva_password), id_usuario), write=True)
     _query("UPDATE TokenRecuperacion SET UsadoEn = NOW() WHERE IdTokenRecuperacion = %s",
            (id_token,), write=True)
 
+# ─── Activación de cuenta (usuario creado por un administrador) ─────────────
+
+def set_password_temporal(id_usuario: int, password_temporal: str):
+    """Guarda una nueva contraseña temporal y deja la cuenta en 'pendiente'
+    (se usa al reenviar la activación)."""
+    _query("""UPDATE Usuario SET PasswordHash = %s, Estado = 'pendiente',
+                                 IntentosFallidos = 0, BloqueadoHasta = NULL
+               WHERE IdUsuario = %s""",
+           (_hash_password(password_temporal), id_usuario), write=True)
+
+def activar_usuario(id_token: int, id_usuario: int, nueva_password: str):
+    """El usuario cambió la contraseña temporal por la suya: la cuenta pasa a
+    'activo' (con esto el correo queda verificado) y el token se quema."""
+    _query("""UPDATE Usuario SET PasswordHash = %s, Estado = 'activo',
+                                 IntentosFallidos = 0, BloqueadoHasta = NULL
+               WHERE IdUsuario = %s""",
+           (_hash_password(nueva_password), id_usuario), write=True)
+    _query("UPDATE TokenRecuperacion SET UsadoEn = NOW() WHERE IdTokenRecuperacion = %s",
+           (id_token,), write=True)
+
+# ─── Verificación en dos pasos (Usuario.Totp* + tabla CodigoRespaldo) ──────
+# La lógica TOTP (secreto, QR, validación) está en app/dosfactores.py.
+
+def guardar_totp_pendiente(id_usuario: int, secreto_cifrado: str):
+    """Secreto recién generado, todavía sin confirmar: TotpActivo sigue en falso."""
+    _query("""UPDATE Usuario SET TotpSecret = %s, TotpActivo = FALSE, TotpUltimoIntervalo = NULL
+               WHERE IdUsuario = %s""", (secreto_cifrado, id_usuario), write=True)
+
+def activar_totp(id_usuario: int, intervalo: int):
+    _query("""UPDATE Usuario SET TotpActivo = TRUE, TotpActivadoEn = NOW(), TotpUltimoIntervalo = %s
+               WHERE IdUsuario = %s""", (intervalo, id_usuario), write=True)
+
+def registrar_totp_usado(id_usuario: int, intervalo: int):
+    """Guarda el último intervalo aceptado para que el mismo código no sirva dos veces."""
+    _query("UPDATE Usuario SET TotpUltimoIntervalo = %s WHERE IdUsuario = %s",
+           (intervalo, id_usuario), write=True)
+
+def desactivar_totp(id_usuario: int):
+    """Borra el secreto y los códigos de respaldo: la cuenta vuelve a solo contraseña."""
+    _query("""UPDATE Usuario SET TotpSecret = NULL, TotpActivo = FALSE,
+                                 TotpUltimoIntervalo = NULL, TotpActivadoEn = NULL
+               WHERE IdUsuario = %s""", (id_usuario,), write=True)
+    _query("DELETE FROM CodigoRespaldo WHERE IdUsuario = %s", (id_usuario,), write=True)
+
+def reemplazar_codigos_respaldo(id_usuario: int, hashes: list[str]):
+    _query("DELETE FROM CodigoRespaldo WHERE IdUsuario = %s", (id_usuario,), write=True)
+    for h in hashes:
+        _query("INSERT INTO CodigoRespaldo (IdUsuario, CodigoHash) VALUES (%s, %s)",
+               (id_usuario, h), write=True)
+
+def usar_codigo_respaldo(id_usuario: int, codigo_hash: str) -> bool:
+    """Marca el código como gastado. Devuelve False si no existe o ya se usó."""
+    afectados = _query("""UPDATE CodigoRespaldo SET UsadoEn = NOW()
+                          WHERE IdUsuario = %s AND CodigoHash = %s AND UsadoEn IS NULL""",
+                       (id_usuario, codigo_hash), write=True)
+    return bool(afectados)
+
+def contar_codigos_respaldo(id_usuario: int) -> int:
+    fila = _query("SELECT COUNT(*) AS n FROM CodigoRespaldo WHERE IdUsuario = %s AND UsadoEn IS NULL",
+                  (id_usuario,), one=True)
+    return int(fila['n']) if fila else 0
+
+def get_usuarios_pendientes_vencidos(dias: int):
+    """Usuarios que nunca activaron su cuenta y fueron creados hace más de `dias`."""
+    return _query(
+        """SELECT IdUsuario AS id, Nombre AS nombre, NombreUsuario AS nombre_usuario,
+                  Email AS email, FechaRegistro AS fecha_registro
+             FROM Usuario
+            WHERE Estado = 'pendiente' AND FechaRegistro < NOW() - %s * INTERVAL '1 day'
+            ORDER BY FechaRegistro""",
+        (dias,)
+    ) or []
+
 def create_usuario(nombre, nombre_usuario, documento, email, telefono, password, rol,
                    id_entidad=None, tipo_documento=None, doc_identidad_path=None,
-                   nacionalidad=None, foto_perfil_path=None):
+                   nacionalidad=None, foto_perfil_path=None, estado='pendiente'):
     # IdRol es NOT NULL en el nuevo esquema: se resuelve a partir de la clave de rol.
     id_rol = _id_rol_por_clave(rol)
     # TipoDocumento pasó a ser ENUM NOT NULL DEFAULT 'CC'; si el formulario no
@@ -228,10 +366,11 @@ def create_usuario(nombre, nombre_usuario, documento, email, telefono, password,
     return _query(
         """INSERT INTO Usuario
                (Nombre, NombreUsuario, Documento, Email, Telefono, PasswordHash, Rol, IdRol,
-                IdEntidad, TipoDocumento, DocIdentidadPath, Nacionalidad, FotoPerfilPath)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                IdEntidad, TipoDocumento, DocIdentidadPath, Nacionalidad, FotoPerfilPath, Estado)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (nombre, nombre_usuario, documento, email, telefono, _hash_password(password), rol, id_rol,
-         id_entidad, tipo_documento or 'CC', doc_identidad_path, nacionalidad or 'CO', foto_perfil_path),
+         id_entidad, tipo_documento or 'CC', doc_identidad_path, nacionalidad or 'CO', foto_perfil_path,
+         estado),
         write=True
     )
 
@@ -524,53 +663,79 @@ def update_historial_canino(id_canino: int, historial_path: str):
 
 _CAMPOS_SESION = """s.IdSesion AS id, s.Especialidad AS especialidad, s.IdCanino AS id_canino,
     s.IdEntidad AS id_entidad, s.Fecha AS fecha, s.Resultado AS resultado,
-    s.Observaciones AS observaciones, s.Instructor AS instructor"""
+    s.Observaciones AS observaciones, s.Instructor AS instructor,
+    s.IdUsuarioRegistra AS id_usuario_registra"""
 
-def get_sesiones_by_especialidad(especialidad: str, id_entidad=None):
+def get_sesiones_by_especialidad(especialidad: str, id_entidad=None, id_usuario=None):
+    """Sesiones de un programa. id_entidad filtra por entidad; id_usuario deja
+    solo las que registró ese usuario (lo que ve un guía canino)."""
+    condiciones, params = ["s.Especialidad = %s"], [especialidad]
     if id_entidad:
-        sql = f"""
-            SELECT {_CAMPOS_SESION}, c.Nombre AS nombre_canino, c.Raza AS raza,
-                   c.FotoPath AS foto_path, e.RazonSocial AS nombre_entidad
-            FROM Sesion s
-            JOIN Canino c ON s.IdCanino = c.IdCanino
-            LEFT JOIN Entidad e ON s.IdEntidad = e.IdEntidad
-            WHERE s.Especialidad = %s AND s.IdEntidad = %s
-            ORDER BY s.Fecha DESC
-        """
-        return _query(sql, (especialidad, id_entidad))
+        condiciones.append("s.IdEntidad = %s"); params.append(id_entidad)
+    if id_usuario:
+        condiciones.append("s.IdUsuarioRegistra = %s"); params.append(id_usuario)
     sql = f"""
         SELECT {_CAMPOS_SESION}, c.Nombre AS nombre_canino, c.Raza AS raza,
                c.FotoPath AS foto_path, e.RazonSocial AS nombre_entidad
         FROM Sesion s
         JOIN Canino c ON s.IdCanino = c.IdCanino
         LEFT JOIN Entidad e ON s.IdEntidad = e.IdEntidad
-        WHERE s.Especialidad = %s
+        WHERE {' AND '.join(condiciones)}
         ORDER BY s.Fecha DESC
     """
-    return _query(sql, (especialidad,))
+    return _query(sql, tuple(params))
 
-def count_sesiones_por_especialidad(id_entidad=None):
+def count_sesiones_por_especialidad(id_entidad=None, id_usuario=None):
+    condiciones, params = [], []
     if id_entidad:
-        rows = _query(
-            "SELECT Especialidad AS especialidad, COUNT(*) AS total FROM Sesion WHERE IdEntidad=%s GROUP BY Especialidad",
-            (id_entidad,)
-        )
-    else:
-        rows = _query(
-            "SELECT Especialidad AS especialidad, COUNT(*) AS total FROM Sesion GROUP BY Especialidad"
-        )
+        condiciones.append("IdEntidad = %s"); params.append(id_entidad)
+    if id_usuario:
+        condiciones.append("IdUsuarioRegistra = %s"); params.append(id_usuario)
+    where = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    rows = _query(
+        f"SELECT Especialidad AS especialidad, COUNT(*) AS total FROM Sesion {where} GROUP BY Especialidad",
+        tuple(params)
+    )
     return {r['especialidad']: r['total'] for r in (rows or [])}
 
 def create_sesion_curso(especialidad, id_canino, id_entidad, fecha,
-                        resultado=None, observaciones=None, instructor=None):
+                        resultado=None, observaciones=None, instructor=None,
+                        id_usuario_registra=None):
+    # IdUsuarioRegistra = quién registró la sesión; así el guía ve solo lo que él hizo.
     return _query(
         """INSERT INTO Sesion
-               (Especialidad, IdCanino, IdEntidad, Fecha, Resultado, Observaciones, Instructor)
-           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+               (Especialidad, IdCanino, IdEntidad, Fecha, Resultado, Observaciones, Instructor,
+                IdUsuarioRegistra)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
         (especialidad, id_canino, id_entidad or None, fecha,
-         resultado or None, observaciones or None, instructor or None),
+         resultado or None, observaciones or None, instructor or None,
+         id_usuario_registra or None),
         write=True
     )
+
+# ─── Comprobaciones de pertenencia (para el rol guía canino) ─────────────────
+
+def canino_es_del_guia(id_canino, id_guia) -> bool:
+    """True si el canino está asignado actualmente a ese guía."""
+    row = _query("SELECT 1 AS ok FROM Canino WHERE IdCanino=%s AND IdGuiaActual=%s",
+                 (id_canino, id_guia), one=True)
+    return row is not None
+
+def sesion_es_del_usuario(id_sesion, id_usuario) -> bool:
+    """True si la sesión la registró ese usuario."""
+    row = _query("SELECT 1 AS ok FROM Sesion WHERE IdSesion=%s AND IdUsuarioRegistra=%s",
+                 (id_sesion, id_usuario), one=True)
+    return row is not None
+
+def get_id_sesion_de_archivo(id_arch):
+    row = _query("SELECT IdSesion AS id_sesion FROM RegistroDocumental WHERE IdRegistroDocumental=%s",
+                 (id_arch,), one=True)
+    return row['id_sesion'] if row else None
+
+def get_id_canino_de_vacuna(id_vacuna):
+    row = _query("SELECT IdCanino AS id_canino FROM CaninoVacuna WHERE IdCaninoVacuna=%s",
+                 (id_vacuna,), one=True)
+    return row['id_canino'] if row else None
 
 def delete_sesion_curso(id_sesion: int):
     return _query("DELETE FROM Sesion WHERE IdSesion=%s", (id_sesion,), write=True)
@@ -654,30 +819,23 @@ def marcar_archivo_eliminado(id_arch: int):
     _query("UPDATE RegistroDocumental SET ArchivoEliminadoEn = NOW() WHERE IdRegistroDocumental=%s",
            (id_arch,), write=True)
 
-def get_all_vision_archivos(id_entidad=None):
-    """Todos los archivos de visión con contexto de sesión, canino y programa."""
+def get_all_vision_archivos(id_entidad=None, id_usuario=None):
+    """Todos los archivos de visión con contexto de sesión, canino y programa.
+    id_entidad filtra por entidad; id_usuario deja solo los de las sesiones que
+    registró ese usuario (lo que ve un guía canino)."""
     campos = """rd.IdRegistroDocumental AS id, rd.ArchivoPath AS archivo_path,
                 rd.TipoArchivo AS tipo, rd.Transcripcion AS notas, rd.FechaRegistro AS created_at,
                 rd.ArchivoEliminadoEn AS archivo_eliminado_en"""
+    condiciones, params = [], []
     if id_entidad:
-        sql = f"""
-            SELECT {campos},
-                   s.Fecha AS fecha, s.Especialidad AS especialidad, s.Resultado AS resultado,
-                   c.Nombre AS nombre_canino, c.Raza AS raza, c.FotoPath AS foto_canino,
-                   e.RazonSocial AS nombre_entidad,
-                   pk.Nombre AS nombre_programa
-            FROM RegistroDocumental rd
-            JOIN Sesion s ON rd.IdSesion = s.IdSesion
-            JOIN Canino c ON s.IdCanino = c.IdCanino
-            LEFT JOIN Entidad e ON s.IdEntidad = e.IdEntidad
-            LEFT JOIN ProgramaK9 pk ON s.Especialidad = pk.Clave
-            WHERE s.IdEntidad = %s
-            ORDER BY rd.FechaRegistro DESC
-        """
-        return _query(sql, (id_entidad,)) or []
+        condiciones.append("s.IdEntidad = %s"); params.append(id_entidad)
+    if id_usuario:
+        condiciones.append("s.IdUsuarioRegistra = %s"); params.append(id_usuario)
+    where = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
     sql = f"""
         SELECT {campos},
                s.Fecha AS fecha, s.Especialidad AS especialidad, s.Resultado AS resultado,
+               s.IdSesion AS id_sesion,
                c.Nombre AS nombre_canino, c.Raza AS raza, c.FotoPath AS foto_canino,
                e.RazonSocial AS nombre_entidad,
                pk.Nombre AS nombre_programa
@@ -686,9 +844,10 @@ def get_all_vision_archivos(id_entidad=None):
         JOIN Canino c ON s.IdCanino = c.IdCanino
         LEFT JOIN Entidad e ON s.IdEntidad = e.IdEntidad
         LEFT JOIN ProgramaK9 pk ON s.Especialidad = pk.Clave
+        {where}
         ORDER BY rd.FechaRegistro DESC
     """
-    return _query(sql) or []
+    return _query(sql, tuple(params)) or []
 
 
 # ─────────────────────────────────────────────

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<!--
+  Correo genérico de AVISO DE SEGURIDAD: verificación en dos pasos activada o
+  desactivada, código de respaldo usado, códigos nuevos generados...
+  Es una alerta: si el usuario no hizo la acción, debe asegurar su cuenta.
+  Mismo criterio que recuperacion.html: tablas y estilos inline.
+  Variables: nombre, titulo, parrafos (lista de textos), fecha, hora,
+             dispositivo, enlace_recuperar, soporte
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ titulo }}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#eef1f5;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef1f5;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="max-width:560px; background-color:#ffffff; border-radius:12px; overflow:hidden; font-family:'Segoe UI', Arial, sans-serif;">
+
+                    <!-- Encabezado oscuro con la marca -->
+                    <tr>
+                        <td align="center" style="background-color:#020810; padding:32px 24px; border-bottom:4px solid #FFD700;">
+                            <div style="font-size:28px; font-weight:900; letter-spacing:6px; color:#ffffff;">
+                                CAN<span style="color:#FFD700;">GUARD</span>
+                            </div>
+                            <div style="font-size:11px; letter-spacing:4px; color:#FFD700; margin-top:6px;">
+                                SISTEMA TÁCTICO K9
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Cuerpo -->
+                    <tr>
+                        <td style="padding:36px 36px 8px 36px; color:#1f2937;">
+                            <h1 style="margin:0 0 16px 0; font-size:22px; color:#020810;">{{ titulo }}</h1>
+                            <p style="margin:0 0 12px 0; font-size:15px; line-height:24px;">
+                                Hola <strong>{{ nombre }}</strong>,
+                            </p>
+                            {% for p in parrafos %}
+                            <p style="margin:0 0 12px 0; font-size:15px; line-height:24px;">{{ p }}</p>
+                            {% endfor %}
+                        </td>
+                    </tr>
+
+                    <!-- Detalles -->
+                    <tr>
+                        <td style="padding:12px 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; line-height:20px; color:#374151;">
+                                <tr>
+                                    <td style="padding:10px 16px 4px 16px;"><strong>Fecha:</strong> {{ fecha }}, {{ hora }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:4px 16px 10px 16px;"><strong>Dispositivo:</strong> {{ dispositivo }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Aviso -->
+                    <tr>
+                        <td style="padding:0 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#fff1f2; border-left:4px solid #dc2626; border-radius:6px;">
+                                <tr>
+                                    <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#7f1d1d;">
+                                        <strong>¿No fuiste tú?</strong> Cambia tu contraseña de inmediato con el botón de abajo
+                                        {% if soporte %}y avisa a soporte en <a href="mailto:{{ soporte }}" style="color:#7f1d1d;">{{ soporte }}</a>{% endif %}.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" style="padding:0 36px 28px 36px;">
+                            <a href="{{ enlace_recuperar }}" target="_blank"
+                                style="display:inline-block; background-color:#FFD700; color:#020810; font-size:15px; font-weight:800; letter-spacing:1px; text-decoration:none; padding:16px 36px; border-radius:8px;">
+                                ASEGURAR MI CUENTA
+                            </a>
+                        </td>
+                    </tr>
+
+                    <!-- Pie -->
+                    <tr>
+                        <td style="padding:20px 36px; background-color:#f8fafc; border-top:1px solid #e5e7eb; font-size:12px; line-height:18px; color:#6b7280;">
+                            Si fuiste tú, no tienes que hacer nada.
+                        </td>
+                    </tr>
+                </table>
+
+                <div style="font-family:'Segoe UI', Arial, sans-serif; font-size:11px; color:#9ca3af; margin-top:16px;">
+                    © CanGuard K9 · Este es un mensaje automático, no respondas a este correo.
+                </div>
+
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

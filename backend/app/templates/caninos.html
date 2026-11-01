@@ -48,8 +48,8 @@
 
     /* Celda foto + nombre */
     .td-canino { display:flex; align-items:center; gap:12px; }
-    .canino-foto { width:44px; height:44px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); flex-shrink:0; }
-    .canino-foto-ph { width:44px; height:44px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-muted); flex-shrink:0; }
+    .canino-foto { width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); flex-shrink:0; }
+    .canino-foto-ph { width:64px; height:64px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--text-muted); flex-shrink:0; }
     .canino-nombre { font-size:14px; font-weight:700; color:var(--text-main); line-height:1.2; }
     .canino-raza   { font-size:11px; color:var(--text-muted); font-style:italic; }
 
@@ -97,8 +97,8 @@
     .can-card.baja { background:rgba(239,68,68,.04); border-color:#fca5a5; }
 
     .can-card-top { padding:20px 16px 14px; display:flex; flex-direction:column; align-items:center; gap:8px; border-bottom:1px solid var(--card-border); }
-    .can-card-foto { width:72px; height:72px; border-radius:50%; object-fit:cover; border:3px solid var(--primary); }
-    .can-card-foto-ph { width:72px; height:72px; border-radius:50%; background:var(--surface-2); border:3px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--text-muted); }
+    .can-card-foto { width:130px; height:130px; border-radius:50%; object-fit:cover; border:4px solid var(--primary); box-shadow:0 4px 14px rgba(0,0,0,.18); }
+    .can-card-foto-ph { width:130px; height:130px; border-radius:50%; background:var(--surface-2); border:4px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:48px; color:var(--text-muted); }
     .can-card.baja .can-card-foto,
     .can-card.baja .can-card-foto-ph { filter:grayscale(70%); border-color:#ef4444; opacity:.8; }
     .can-card-nombre { font-size:15px; font-weight:800; color:var(--text-main); text-align:center; line-height:1.2; }
@@ -145,9 +145,9 @@
     .req { color:#ef4444; font-weight:700; margin-left:2px; }
 
     /* Foto preview en modal */
-    .foto-preview-wrap { display:flex; align-items:center; gap:14px; }
-    .foto-preview { width:70px; height:70px; border-radius:50%; object-fit:cover; border:2px solid var(--primary); }
-    .foto-ph { width:70px; height:70px; border-radius:50%; background:var(--surface-2); border:2px solid var(--card-border); display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--text-muted); }
+    .foto-preview-wrap { display:flex; align-items:center; gap:22px; }
+    .foto-preview { width:150px; height:150px; border-radius:50%; object-fit:cover; border:3px solid var(--primary); box-shadow:0 4px 14px rgba(0,0,0,.18); }
+    .foto-ph { width:150px; height:150px; border-radius:50%; background:var(--surface-2); border:3px dashed var(--card-border); display:flex; align-items:center; justify-content:center; font-size:52px; color:var(--text-muted); cursor:pointer; }
 
     .modal-footer { padding:16px 24px; border-top:1px solid var(--card-border); display:flex; justify-content:flex-end; gap:10px; position:sticky; bottom:0; background:var(--card-bg); }
     .btn-cancel { padding:10px 20px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:13px; cursor:pointer; transition:.18s; }
@@ -178,17 +178,26 @@
 <!-- ═══════════════════════ CABECERA ═══════════════════════ -->
 <div class="page-header">
     <div>
+        {# El guía canino ve solo sus caninos, en modo consulta (no crea, edita ni da de baja) #}
+        {% set es_guia = session.rol == 'guia_canino' %}
+        {% if es_guia %}
+        <h1><i class="bi bi-shield-dog-fill" style="color:var(--primary); margin-right:8px;"></i>MIS CANINOS</h1>
+        <div class="sub">Unidades caninas asignadas a ti</div>
+        {% else %}
         <h1><i class="bi bi-shield-dog-fill" style="color:var(--primary); margin-right:8px;"></i>CANINOS K9</h1>
         <div class="sub">Unidades caninas operativas — gestión y seguimiento</div>
+        {% endif %}
     </div>
     <div class="page-header-right">
         <div class="vista-toggle">
             <button class="vista-btn active" id="btnVistaTbl" onclick="setVistaCaninos('tabla')" title="Vista tabla"><i class="bi bi-table"></i></button>
             <button class="vista-btn" id="btnVistaCards" onclick="setVistaCaninos('cards')" title="Vista tarjetas"><i class="bi bi-grid-fill"></i></button>
         </div>
+        {% if not es_guia %}
         <button class="btn-nuevo" onclick="abrirModalNuevo()">
             <i class="bi bi-plus-circle-fill"></i> NUEVO CANINO
         </button>
+        {% endif %}
     </div>
 </div>
 
@@ -372,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <!-- Acciones -->
         <td>
             <div class="td-actions">
-                {% if c.estado != 'baja' %}
+                {% if c.estado != 'baja' and not es_guia %}
                 <button class="btn-icon btn-icon-edit" title="Editar" onclick="abrirModalEditar({{ c.id }})">
                     <i class="bi bi-pencil-fill"></i>
                 </button>
@@ -462,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
 
         <div class="can-card-foot">
-            {% if c.estado != 'baja' %}
+            {% if c.estado != 'baja' and not es_guia %}
             <button class="btn-icon btn-icon-edit" title="Editar" onclick="abrirModalEditar({{ c.id }})">
                 <i class="bi bi-pencil-fill"></i>
             </button>
@@ -504,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="form-section">
             <div class="form-section-title"><i class="bi bi-camera-fill"></i> Foto del Canino</div>
             <div class="foto-preview-wrap">
-                <div class="foto-ph" id="fotoPreviewWrap">
+                <div class="foto-ph" id="fotoPreviewWrap" onclick="document.getElementById('foto_canino').click()" title="Seleccionar foto">
                     <i class="bi bi-shield-dog-fill"></i>
                 </div>
                 <div>
@@ -904,7 +913,7 @@ function previsualizarFoto(input) {
 }
 
 function resetFotoPreview() {
-    document.getElementById('fotoPreviewWrap').innerHTML = '<i class="bi bi-shield-dog-fill" style="font-size:24px; color:var(--text-muted);"></i>';
+    document.getElementById('fotoPreviewWrap').innerHTML = '<i class="bi bi-shield-dog-fill"></i>';
 }
 
 /* ── Modal dar de baja ── */

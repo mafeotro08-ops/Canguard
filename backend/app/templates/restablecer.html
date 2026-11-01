@@ -128,6 +128,12 @@
         }
 
         .register-text { text-align: center; margin-top: 20px; font-size: 13px; color: white; }
+
+        /* Lista de requisitos de la contraseña: se van marcando mientras se escribe */
+        .reglas { list-style: none; margin: 10px 0 0; font-size: 11px; color: rgba(255, 255, 255, 0.5); line-height: 18px; }
+        .reglas li::before { content: '○ '; }
+        .reglas li.ok { color: #4ade80; }
+        .reglas li.ok::before { content: '✔ '; }
         .register-text a { color: var(--primary); text-decoration: none; }
 
         .error-msg {
@@ -152,24 +158,35 @@
 
         {% if valido %}
         <!-- Envía la nueva contraseña a POST /restablecer (main.py) junto con el token del enlace -->
-        <form action="/restablecer" method="post">
+        <form action="/restablecer" method="post" onsubmit="return validarFormulario()">
             {% if error %}
             <div class="error-msg">⚠ {{ error }}</div>
             {% endif %}
+            <!-- Error de validación en el navegador (antes de enviar) -->
+            <div class="error-msg" id="errCliente" style="display:none"></div>
             <input type="hidden" name="token" value="{{ token }}">
             <div class="form-group">
                 <label>Nueva contraseña</label>
                 <div class="pass-wrap">
-                    <input type="password" name="password" placeholder="Mínimo 6 caracteres" minlength="6" required
-                        autocomplete="new-password">
+                    <!-- pattern/minlength repiten la política del servidor (app/seguridad.py) -->
+                    <input type="password" name="password" id="inpNueva" placeholder="Mínimo {{ LONGITUD_MIN_PASSWORD }} caracteres"
+                        minlength="{{ LONGITUD_MIN_PASSWORD }}" pattern="{{ PASSWORD_PATTERN }}" title="{{ REGLAS_PASSWORD }}" required
+                        autocomplete="new-password" oninput="evaluarReglas(this.value)">
                     <button type="button" class="btn-ojo" onclick="alternarClave(this)" aria-label="Mostrar contraseña"></button>
                 </div>
+                <ul class="reglas" id="reglasPass">
+                    <li data-regla="len">Mínimo {{ LONGITUD_MIN_PASSWORD }} caracteres</li>
+                    <li data-regla="mayus">Una letra mayúscula</li>
+                    <li data-regla="minus">Una letra minúscula</li>
+                    <li data-regla="num">Un número</li>
+                    <li data-regla="esp">Un carácter especial (! @ # $ % &amp; *)</li>
+                </ul>
             </div>
             <div class="form-group">
                 <label>Confirmar contraseña</label>
                 <div class="pass-wrap">
-                    <input type="password" name="confirmar" placeholder="Repita la contraseña" minlength="6" required
-                        autocomplete="new-password">
+                    <input type="password" name="confirmar" id="inpConfirmar" placeholder="Repita la contraseña"
+                        minlength="{{ LONGITUD_MIN_PASSWORD }}" required autocomplete="new-password">
                     <button type="button" class="btn-ojo" onclick="alternarClave(this)" aria-label="Mostrar contraseña"></button>
                 </div>
             </div>
@@ -188,6 +205,31 @@
         // Íconos SVG del ojito: abierto (mostrar) y tachado (ocultar)
         const OJO_ABIERTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
         const OJO_TACHADO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+        // Marca en verde cada requisito que la contraseña ya cumple.
+        function evaluarReglas(valor) {
+            const r = {
+                len:   valor.length >= {{ LONGITUD_MIN_PASSWORD }},
+                mayus: /[A-Z]/.test(valor),
+                minus: /[a-z]/.test(valor),
+                num:   /[0-9]/.test(valor),
+                esp:   /[^A-Za-z0-9]/.test(valor),
+            };
+            document.querySelectorAll('#reglasPass li').forEach(li => li.classList.toggle('ok', !!r[li.dataset.regla]));
+            return Object.values(r).every(Boolean);
+        }
+
+        // Validación en el navegador antes de enviar (el servidor valida de nuevo).
+        function validarFormulario() {
+            const err = document.getElementById('errCliente');
+            const nueva = document.getElementById('inpNueva').value;
+            let mensaje = '';
+            if (!evaluarReglas(nueva)) mensaje = 'La contraseña no cumple todos los requisitos.';
+            else if (nueva !== document.getElementById('inpConfirmar').value) mensaje = 'Las contraseñas no coinciden.';
+            err.textContent = mensaje ? '⚠ ' + mensaje : '';
+            err.style.display = mensaje ? 'block' : 'none';
+            return !mensaje;
+        }
 
         // Cambia el input entre "password" (puntos) y "text" (visible).
         // Cada campo tiene su propio ojito, se manejan por separado.

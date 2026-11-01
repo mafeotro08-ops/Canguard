@@ -1,0 +1,145 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<!--
+  Pantalla "Seguridad" del usuario logueado: verificación en dos pasos (2FA).
+  Rutas en main.py, sección "Verificación en dos pasos".
+  Variables: usuario, activo, restantes, error, ok, setup (qr, secreto), codigos
+-->
+<style>
+    .page-header { margin-bottom: 28px; }
+    .page-header h1 { font-size: 22px; font-weight: 800; color: var(--text-main); letter-spacing: 1px; }
+    .page-header .sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+    .seg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; max-width: 980px; }
+    .seg-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px;
+                box-shadow: var(--card-shadow); padding: 24px; }
+    .seg-card h2 { font-size: 14px; font-weight: 800; color: var(--text-main); letter-spacing: 1px;
+                   text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .seg-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px; }
+
+    .estado { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .estado.on  { background: #d1fae5; color: #065f46; }
+    .estado.off { background: #fee2e2; color: #991b1b; }
+
+    .seg-form label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+                      color: var(--text-muted); margin: 12px 0 6px; }
+    .seg-form input { width: 100%; padding: 11px 14px; border: 1px solid var(--card-border); border-radius: 8px;
+                      background: var(--surface-2); color: var(--text-main); font-size: 14px; outline: none; }
+    .seg-form input:focus { border-color: var(--primary); }
+    .seg-form input.codigo { font-family: Consolas, monospace; font-size: 20px; letter-spacing: 6px; text-align: center; }
+
+    .btn-seg { display: inline-flex; align-items: center; gap: 7px; padding: 10px 20px; border-radius: 8px; border: 1px solid var(--primary);
+               background: var(--primary); color: #000; font-size: 12px; font-weight: 800; cursor: pointer; margin-top: 16px; }
+    .btn-seg:hover { filter: brightness(1.1); }
+    .btn-seg.rojo { background: transparent; border-color: #ef4444; color: #ef4444; }
+    .btn-seg.rojo:hover { background: #ef4444; color: #fff; }
+    .btn-seg.gris { background: transparent; border-color: var(--card-border); color: var(--text-muted); }
+
+    .msg { padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 20px; max-width: 980px; }
+    .msg.err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .msg.ok  { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+
+    .qr-wrap { text-align: center; margin: 10px 0; }
+    .qr-wrap img { width: 200px; height: 200px; border: 8px solid #fff; border-radius: 8px; background: #fff; }
+    .secreto { font-family: Consolas, monospace; font-size: 13px; letter-spacing: 1px; background: var(--surface-2);
+               border: 1px dashed var(--card-border); border-radius: 8px; padding: 10px; text-align: center; word-break: break-all; color: var(--text-main); }
+
+    .codigos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 14px 0; }
+    .codigos code { display: block; font-family: Consolas, monospace; font-size: 15px; letter-spacing: 2px; text-align: center;
+                    padding: 8px; background: #fef9c3; border: 1px solid #fcd34d; border-radius: 6px; color: #713f12; }
+    .pasos { font-size: 13px; color: var(--text-muted); line-height: 1.7; padding-left: 18px; margin-bottom: 10px; }
+</style>
+
+<div class="page-header">
+    <h1><i class="bi bi-shield-lock-fill" style="color:var(--primary); margin-right:8px;"></i>SEGURIDAD</h1>
+    <div class="sub">Verificación en dos pasos para la cuenta <strong>{{ usuario.nombre_usuario }}</strong></div>
+</div>
+
+{% if error %}<div class="msg err"><i class="bi bi-exclamation-triangle-fill"></i> {{ error }}</div>{% endif %}
+{% if ok %}<div class="msg ok"><i class="bi bi-check-circle-fill"></i> {{ ok }}</div>{% endif %}
+
+{% if codigos %}
+<!-- Códigos de respaldo recién generados: se muestran UNA sola vez -->
+<div class="seg-card" style="max-width:980px; margin-bottom:20px; border-color:#fcd34d;">
+    <h2><i class="bi bi-key-fill" style="color:#d97706"></i> Guarda tus códigos de respaldo</h2>
+    <p>Cada código sirve <strong>una sola vez</strong> para entrar si pierdes el celular. Guárdalos en un lugar seguro:
+       <strong>no volverán a mostrarse</strong>. Si se te acaban, genera nuevos desde esta pantalla.</p>
+    <div class="codigos">
+        {% for c in codigos %}<code>{{ c }}</code>{% endfor %}
+    </div>
+    <button type="button" class="btn-seg gris" onclick="copiarCodigos()"><i class="bi bi-clipboard"></i> Copiar todos</button>
+    <script>
+        function copiarCodigos() {
+            const texto = {{ codigos | join('\n') | tojson }};
+            navigator.clipboard.writeText(texto).then(() => alert('Códigos copiados al portapapeles.'));
+        }
+    </script>
+</div>
+{% endif %}
+
+<div class="seg-grid">
+
+    {% if setup %}
+    <!-- Paso 2 de la activación: escanear el QR y confirmar con un código -->
+    <div class="seg-card" style="grid-column: 1 / -1;">
+        <h2><i class="bi bi-qr-code-scan"></i> Vincula tu app de autenticación</h2>
+        <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items: start;">
+            <div class="qr-wrap"><img src="{{ setup.qr }}" alt="Código QR para Google Authenticator"></div>
+            <div>
+                <ol class="pasos">
+                    <li>Instala <strong>Google Authenticator</strong> (o Microsoft Authenticator, Authy...) en tu celular.</li>
+                    <li>En la app toca <strong>+</strong> y escanea este código QR.</li>
+                    <li>Si no puedes escanear, escribe esta clave a mano:</li>
+                </ol>
+                <div class="secreto">{{ setup.secreto }}</div>
+                <form class="seg-form" method="post" action="/seguridad/2fa/confirmar" autocomplete="off">
+                    <label>Código de 6 dígitos que muestra la app</label>
+                    <input class="codigo" type="text" name="codigo" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus>
+                    <button class="btn-seg" type="submit"><i class="bi bi-check2-circle"></i> Activar verificación</button>
+                    <a href="/logout" class="btn-seg gris" style="text-decoration:none; margin-left:8px;">Salir y hacerlo después</a>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {% elif not activo %}
+    <!-- Paso 1 de la configuración: confirmar la contraseña -->
+    <div class="seg-card">
+        <h2><i class="bi bi-phone-fill"></i> Verificación en dos pasos <span class="estado off"><i class="bi bi-exclamation-circle-fill"></i> Pendiente</span></h2>
+        <p>En CanGuard la verificación en dos pasos es <strong>obligatoria</strong>. Además de tu contraseña, al iniciar
+           sesión se pedirá un código de 6 dígitos que genera la app <strong>Google Authenticator</strong> en tu celular.
+           Hasta que la configures no podrás usar los demás módulos.</p>
+        <form class="seg-form" method="post" action="/seguridad/2fa/iniciar">
+            <label>Confirma tu contraseña para continuar</label>
+            <input type="password" name="password" required autocomplete="current-password">
+            <button class="btn-seg" type="submit"><i class="bi bi-shield-plus"></i> Configurar verificación en dos pasos</button>
+        </form>
+    </div>
+
+    {% else %}
+    <!-- 2FA activa: códigos de respaldo -->
+    <div class="seg-card">
+        <h2><i class="bi bi-phone-fill"></i> Verificación en dos pasos <span class="estado on"><i class="bi bi-check-circle-fill"></i> Activa</span></h2>
+        <p>Al iniciar sesión se pide el código de tu app de autenticación. Te quedan
+           <strong>{{ restantes }}</strong> códigos de respaldo sin usar.</p>
+        <form class="seg-form" method="post" action="/seguridad/2fa/codigos" autocomplete="off">
+            <label>Contraseña</label>
+            <input type="password" name="password" required autocomplete="current-password">
+            <label>Código de la app</label>
+            <input class="codigo" type="text" name="codigo" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+            <button class="btn-seg" type="submit"><i class="bi bi-arrow-repeat"></i> Generar códigos de respaldo nuevos</button>
+        </form>
+        <p style="margin-top:10px; font-size:12px;">Los códigos anteriores dejarán de servir.</p>
+    </div>
+
+    <div class="seg-card">
+        <h2><i class="bi bi-phone-flip"></i> ¿Cambiaste de celular?</h2>
+        <p>La verificación en dos pasos no se puede desactivar. Si perdiste el celular y no tienes códigos de respaldo,
+           pide a tu administrador que la reinicie desde el panel de usuarios: al volver a entrar vincularás la app nueva.</p>
+    </div>
+
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<!--
+  Correo de ACTIVACIÓN de cuenta: se envía cuando un administrador crea un
+  usuario (y cuando se reenvía la activación). Lleva el usuario y la
+  contraseña temporal; para activar la cuenta el usuario debe cambiarla con
+  el enlace. Mismo criterio que recuperacion.html: tablas y estilos inline.
+  Variables: nombre, nombre_usuario, password_temporal, enlace, horas,
+             nombre_entidad (opcional), reglas
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activa tu cuenta</title>
+</head>
+<body style="margin:0; padding:0; background-color:#eef1f5;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef1f5;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="max-width:560px; background-color:#ffffff; border-radius:12px; overflow:hidden; font-family:'Segoe UI', Arial, sans-serif;">
+
+                    <!-- Encabezado oscuro con la marca -->
+                    <tr>
+                        <td align="center" style="background-color:#020810; padding:32px 24px; border-bottom:4px solid #FFD700;">
+                            <div style="font-size:28px; font-weight:900; letter-spacing:6px; color:#ffffff;">
+                                CAN<span style="color:#FFD700;">GUARD</span>
+                            </div>
+                            <div style="font-size:11px; letter-spacing:4px; color:#FFD700; margin-top:6px;">
+                                SISTEMA TÁCTICO K9
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Cuerpo -->
+                    <tr>
+                        <td style="padding:36px 36px 8px 36px; color:#1f2937;">
+                            <h1 style="margin:0 0 16px 0; font-size:22px; color:#020810;">
+                                Bienvenido a CanGuard, activa tu cuenta
+                            </h1>
+                            <p style="margin:0 0 12px 0; font-size:15px; line-height:24px;">
+                                Hola <strong>{{ nombre }}</strong>,
+                            </p>
+                            <p style="margin:0 0 20px 0; font-size:15px; line-height:24px;">
+                                Se creó una cuenta para ti en CanGuard K9{% if nombre_entidad %} para la entidad
+                                <strong>{{ nombre_entidad }}</strong>{% endif %}. Este correo se envió únicamente a ti.
+                                Estos son tus datos de acceso:
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Credenciales -->
+                    <tr>
+                        <td style="padding:0 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; line-height:20px; color:#374151;">
+                                <tr>
+                                    <td style="padding:12px 16px 4px 16px;">
+                                        <span style="font-size:11px; letter-spacing:1px; color:#6b7280;">USUARIO</span><br>
+                                        <span style="font-family:Consolas, monospace; font-size:16px; font-weight:700; color:#020810;">{{ nombre_usuario }}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:4px 16px 12px 16px;">
+                                        <span style="font-size:11px; letter-spacing:1px; color:#6b7280;">CONTRASEÑA TEMPORAL</span><br>
+                                        <span style="font-family:Consolas, monospace; font-size:18px; font-weight:700; letter-spacing:2px; color:#020810;">{{ password_temporal }}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Instrucción principal -->
+                    <tr>
+                        <td style="padding:0 36px 20px 36px; color:#1f2937; font-size:15px; line-height:24px;">
+                            Esta contraseña es temporal. <strong>Para activar tu cuenta debes cambiarla ahora</strong>:
+                            haz clic en el botón, escribe la contraseña temporal y crea la tuya.
+                        </td>
+                    </tr>
+
+                    <!-- Botón dorado -->
+                    <tr>
+                        <td align="center" style="padding:0 36px 24px 36px;">
+                            <a href="{{ enlace }}" target="_blank"
+                                style="display:inline-block; background-color:#FFD700; color:#020810; font-size:15px; font-weight:800; letter-spacing:1px; text-decoration:none; padding:16px 36px; border-radius:8px;">
+                                ACTIVAR MI CUENTA
+                            </a>
+                        </td>
+                    </tr>
+
+                    <!-- Reglas de la nueva contraseña -->
+                    <tr>
+                        <td style="padding:0 36px 20px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#eff6ff; border-left:4px solid #3b82f6; border-radius:6px;">
+                                <tr>
+                                    <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#1e3a8a;">
+                                        <strong>Tu nueva contraseña debe cumplir:</strong><br>{{ reglas }}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Aviso de vencimiento -->
+                    <tr>
+                        <td style="padding:0 36px 24px 36px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                                style="background-color:#fffbea; border-left:4px solid #FFD700; border-radius:6px;">
+                                <tr>
+                                    <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#6b5300;">
+                                        ⏱ El enlace vence en <strong>{{ horas }} horas</strong> y solo se puede usar una vez.
+                                        Si vence, pide a tu administrador que reenvíe la activación o usa
+                                        "¿Olvidó su clave?" en la pantalla de ingreso.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Pie -->
+                    <tr>
+                        <td style="padding:20px 36px; background-color:#f8fafc; border-top:1px solid #e5e7eb; font-size:12px; line-height:18px; color:#6b7280;">
+                            Después de crear tu contraseña vincularás la app <strong>Google Authenticator</strong> de tu celular:
+                            la verificación en dos pasos es obligatoria en CanGuard.<br><br>
+                            No compartas este correo. Si no esperabas una cuenta en CanGuard, ignóralo:
+                            la cuenta quedará sin activar y se eliminará automáticamente.
+                        </td>
+                    </tr>
+                </table>
+
+                <div style="font-family:'Segoe UI', Arial, sans-serif; font-size:11px; color:#9ca3af; margin-top:16px;">
+                    © CanGuard K9 · Este es un mensaje automático, no respondas a este correo.
+                </div>
+
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

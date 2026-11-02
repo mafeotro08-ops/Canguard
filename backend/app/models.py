@@ -939,3 +939,109 @@ def create_registro_ia(especialidad, id_canino, id_entidad, fecha,
 
 def delete_registro_ia(id_reg: int):
     _query("DELETE FROM RegistroIa WHERE IdRegistroIa=%s", (id_reg,), write=True)
+
+
+# ─────────────────────────────────────────────
+#  GEOLOCALIZACIÓN  (tablas DispositivoGps y Posicion)
+# ─────────────────────────────────────────────
+# Un dispositivo es el celular del guía (app Traccar Client) o, más adelante,
+# un collar GPS. Cada reporte queda en Posicion ligado al canino y al guía
+# que tenía asignados el dispositivo en ese momento.
+# FechaHora se guarda en UTC; las consultas la convierten con AT TIME ZONE
+# para que el "hace X segundos" no dependa de la zona horaria del servidor.
+
+_CAMPOS_DISPOSITIVO = """
+    d.IdDispositivo AS id, d.IdEntidad AS id_entidad, d.IdUsuario AS id_usuario, d.IdCanino AS id_canino,
+    d.Identificador AS identificador, d.Tipo AS tipo, d.Modelo AS modelo, d.Activo AS activo,
+    d.BateriaPct AS bateria, EXTRACT(EPOCH FROM (d.UltimaConexion AT TIME ZONE 'UTC')) AS ultima_conexion_epoch,
+    c.Nombre AS nombre_canino, c.FotoPath AS foto_canino, c.CodigoUnico AS codigo_canino,
+    u.Nombre AS nombre_guia, e.RazonSocial AS nombre_entidad"""
+
+_JOIN_DISPOSITIVO = """
+    FROM DispositivoGps d
+    LEFT JOIN Canino  c ON c.IdCanino  = d.IdCanino
+    LEFT JOIN Usuario u ON u.IdUsuario = d.IdUsuario
+    LEFT JOIN Entidad e ON e.IdEntidad = d.IdEntidad"""
+
+
+def _filtro_dispositivos(id_entidad=None, id_guia=None, solo_activos=False):
+    """El super admin ve todo; el admin, su entidad; el guía, los dispositivos
+    asignados a él o a sus caninos."""
+    cond, params = [], []
+    if solo_activos:
+        cond.append("d.Activo = 1")
+    if id_entidad:
+        cond.append("d.IdEntidad = %s"); params.append(id_entidad)
+    if id_guia:
+        cond.append("(d.IdUsuario = %s OR c.IdGuiaActual = %s)"); params += [id_guia, id_guia]
+    return (("WHERE " + " AND ".join(cond)) if cond else ""), tuple(params)
+
+
+def get_dispositivos(id_entidad=None, id_guia=None):
+    where, params = _filtro_dispositivos(id_entidad, id_guia)
+    return _query(f"SELECT {_CAMPOS_DISPOSITIVO} {_JOIN_DISPOSITIVO} {where} ORDER BY d.Activo DESC, c.Nombre, d.IdDispositivo",
+                  params) or []
+
+
+def get_dispositivo_by_id(id_dispositivo: int):
+    return _query(f"SELECT {_CAMPOS_DISPOSITIVO} {_JOIN_DISPOSITIVO} WHERE d.IdDispositivo = %s",
+                  (id_dispositivo,), one=True)
+
+
+def get_dispositivo_por_identificador(identificador: str):
+    """Solo dispositivos activos: un celular dado de baja deja de poder reportar."""
+    return _query(f"SELECT {_CAMPOS_DISPOSITIVO} {_JOIN_DISPOSITIVO} WHERE d.Identificador = %s AND d.Activo = 1",
+                  (identificador,), one=True)
+
+
+def create_dispositivo(id_entidad, id_usuario, id_canino, identificador, tipo='smartphone', modelo=None):
+    return _query(
+        """INSERT INTO DispositivoGps (IdEntidad, IdUsuario, IdCanino, Identificador, Tipo, Modelo, AsignadoA)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+        (id_entidad, id_usuario, id_canino, identificador, tipo, modelo,
+         'canino' if tipo == 'collar_gps' else 'guia'), write=True)
+
+
+def update_dispositivo(id_dispositivo, id_usuario, id_canino, modelo, activo: bool):
+    return _query(
+        """UPDATE DispositivoGps SET IdUsuario = %s, IdCanino = %s, Modelo = %s, Activo = %s
+           WHERE IdDispositivo = %s""",
+        (id_usuario, id_canino, modelo, 1 if activo else 0, id_dispositivo), write=True)
+
+
+def insertar_posicion(disp: dict, lat, lng, fecha_hora_utc, altitud=None, precision=None,
+                      velocidad_kmh=None, rumbo=None, bateria=None):
+    """Guarda un reporte y actualiza la última conexión del dispositivo."""
+    _query(
+        """INSERT INTO Posicion (IdDispositivo, IdEntidad, IdCanino, IdUsuario, Latitud, Longitud,
+                                 AltitudM, PrecisionM, VelocidadKmh, RumboGrados, BateriaPct, FechaHora)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (disp['id'], disp['id_entidad'], disp.get('id_canino'), disp.get('id_usuario'), lat, lng,
+         altitud, precision, velocidad_kmh, rumbo, bateria, fecha_hora_utc), write=True)
+    _query("""UPDATE DispositivoGps SET UltimaConexion = NOW(), BateriaPct = COALESCE(%s, BateriaPct)
+              WHERE IdDispositivo = %s""", (bateria, disp['id']), write=True)
+
+
+def get_ultimas_posiciones(id_entidad=None, id_guia=None):
+    """Última posición de cada dispositivo activo, con el canino y el guía."""
+    where, params = _filtro_dispositivos(id_entidad, id_guia, solo_activos=True)
+    return _query(
+        f"""SELECT DISTINCT ON (d.IdDispositivo) {_CAMPOS_DISPOSITIVO},
+                   p.Latitud AS lat, p.Longitud AS lng, p.PrecisionM AS precision_m,
+                   p.VelocidadKmh AS velocidad, p.BateriaPct AS bateria_reporte,
+                   EXTRACT(EPOCH FROM (p.FechaHora AT TIME ZONE 'UTC')) AS epoch,
+                   EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - (p.FechaHora AT TIME ZONE 'UTC'))) AS hace_seg
+            {_JOIN_DISPOSITIVO}
+            JOIN Posicion p ON p.IdDispositivo = d.IdDispositivo
+            {where}
+            ORDER BY d.IdDispositivo, p.FechaHora DESC""", params) or []
+
+
+def get_recorrido(id_dispositivo: int, desde_utc, hasta_utc):
+    """Puntos de un dispositivo entre dos instantes (UTC), en orden de tiempo."""
+    return _query(
+        """SELECT Latitud AS lat, Longitud AS lng, VelocidadKmh AS velocidad,
+                  EXTRACT(EPOCH FROM (FechaHora AT TIME ZONE 'UTC')) AS epoch
+             FROM Posicion
+            WHERE IdDispositivo = %s AND FechaHora >= %s AND FechaHora < %s
+            ORDER BY FechaHora""", (id_dispositivo, desde_utc, hasta_utc)) or []

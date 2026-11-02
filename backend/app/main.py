@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from typing import Optional
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -43,6 +43,8 @@ from .models import (
     contar_tokens_recientes, set_password_temporal, activar_usuario,
     guardar_totp_pendiente, activar_totp, registrar_totp_usado, desactivar_totp,
     reemplazar_codigos_respaldo, usar_codigo_respaldo, contar_codigos_respaldo,
+    get_dispositivos, get_dispositivo_by_id, get_dispositivo_por_identificador,
+    create_dispositivo, update_dispositivo, insertar_posicion, get_ultimas_posiciones, get_recorrido,
 )
 from .correo import enviar_correo
 from .seguridad import (
@@ -1776,12 +1778,200 @@ async def ver_registro_guias(request: Request):
     return templates.TemplateResponse('registro.html', ctx(request, guias=guias, entidades=entidades))
 
 
+# ---------------------------------------------------------------------------
+# Geolocalización (tablas DispositivoGps y Posicion)
+#   Los celulares de los guías reportan su ubicación con la app gratuita
+#   Traccar Client (protocolo OsmAnd: una petición HTTP con id, lat, lon,
+#   timestamp, speed, bearing, altitude, accuracy, batt). Más adelante los
+#   collares GPS usan el mismo endpoint.
+#   - GET/POST /api/gps                <- reportes (sin sesión: el identificador
+#                                         del dispositivo es la credencial)
+#   - GET /geolocalizacion             -> mapa en vivo y gestión de dispositivos
+#   - GET /api/posiciones/ultimas      -> última posición de cada dispositivo
+#   - GET /api/posiciones/recorrido    -> puntos de un dispositivo en un día
+# ---------------------------------------------------------------------------
+
+def _filtro_geo(request: Request):
+    """(id_entidad, id_guia) con que se filtran dispositivos y posiciones según el rol."""
+    if es_super_admin(request):
+        return None, None
+    if es_guia(request):
+        return None, id_usuario_sesion(request)
+    return request.session.get('id_entidad'), None
+
+
+def _num(v):
+    """Decimal/None -> float/None, para poder responder JSON."""
+    return float(v) if v is not None else None
+
+
+def _fecha_reporte_utc(valor) -> datetime:
+    """Traccar manda `timestamp` en segundos Unix (a veces milisegundos o ISO).
+    Devuelve un datetime UTC sin zona, que es como se guarda en Posicion."""
+    try:
+        texto = str(valor or '').strip()
+        if texto.isdigit():
+            n = int(texto)
+            if n > 10 ** 11:          # milisegundos
+                n //= 1000
+            return datetime.fromtimestamp(n, tz=timezone.utc).replace(tzinfo=None)
+        if texto:
+            d = datetime.fromisoformat(texto.replace('Z', '+00:00'))
+            return (d.astimezone(timezone.utc) if d.tzinfo else d).replace(tzinfo=None)
+    except (ValueError, OverflowError, OSError):
+        pass
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _posicion_json(fila: dict) -> dict:
+    return {
+        'id': fila['id'], 'identificador': fila['identificador'], 'tipo': fila['tipo'],
+        'canino': fila.get('nombre_canino'), 'codigo_canino': fila.get('codigo_canino'),
+        'foto': fila.get('foto_canino'), 'guia': fila.get('nombre_guia'), 'entidad': fila.get('nombre_entidad'),
+        'lat': _num(fila.get('lat')), 'lng': _num(fila.get('lng')), 'precision_m': _num(fila.get('precision_m')),
+        'velocidad': _num(fila.get('velocidad')),
+        'bateria': fila.get('bateria_reporte') if fila.get('bateria_reporte') is not None else fila.get('bateria'),
+        'epoch': _num(fila.get('epoch')), 'hace_seg': _num(fila.get('hace_seg')),
+    }
+
+
+@app.api_route('/api/gps', methods=['GET', 'POST'])
+async def recibir_gps(request: Request):
+    """Recibe un reporte de ubicación (protocolo OsmAnd de Traccar Client y de
+    muchos rastreadores GPS). Responde texto plano: la app muestra ese estado."""
+    datos = dict(request.query_params)
+    if request.method == 'POST':
+        try:
+            datos.update(dict(await request.form()))
+        except Exception:
+            pass
+    identificador = (datos.get('id') or datos.get('deviceid') or '').strip()
+    if not identificador or datos.get('lat') is None or datos.get('lon') is None:
+        return PlainTextResponse('faltan id, lat o lon', status_code=400)
+    disp = get_dispositivo_por_identificador(identificador)
+    if not disp:
+        # 404 a propósito: así la app marca el envío como fallido y se nota que
+        # el identificador no está registrado (o el dispositivo está inactivo).
+        return PlainTextResponse('dispositivo no registrado', status_code=404)
+    try:
+        lat, lng = float(datos['lat']), float(datos['lon'])
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValueError
+    except ValueError:
+        return PlainTextResponse('lat/lon inválidos', status_code=400)
+
+    def opcional(clave, factor=1.0, entero=False):
+        try:
+            v = float(datos[clave]) * factor
+            return int(round(v)) if entero else round(v, 2)
+        except (KeyError, ValueError, TypeError):
+            return None
+
+    insertar_posicion(
+        disp, lat, lng, _fecha_reporte_utc(datos.get('timestamp')),
+        altitud=opcional('altitude'), precision=opcional('accuracy'),
+        velocidad_kmh=opcional('speed', 1.852),       # Traccar manda nudos
+        rumbo=opcional('bearing', entero=True), bateria=opcional('batt', entero=True),
+    )
+    return PlainTextResponse('OK')
+
+
 @app.get('/geolocalizacion', response_class=HTMLResponse)
 async def geolocalizacion(request: Request):
     r = redirigir_si_no_autenticado(request)
     if r:
         return r
-    return templates.TemplateResponse('geolocalizacion.html', ctx(request))
+    id_ent, id_guia = _filtro_geo(request)
+    if es_guia(request):
+        dispositivos, caninos, guias = [], [], []
+    else:
+        dispositivos = get_dispositivos(id_ent)
+        caninos = get_all_caninos(id_entidad=id_ent) or []
+        guias   = get_guias_caninos(id_ent) or []
+    return templates.TemplateResponse('geolocalizacion.html', ctx(
+        request, dispositivos=dispositivos, caninos=caninos, guias=guias,
+        app_url=os.getenv('APP_URL', str(request.base_url)).rstrip('/'),
+        flash_geo=request.session.pop('flash_geo', None),
+        form_error=request.session.pop('flash_form_error', None),
+    ))
+
+
+def _canino_permitido(request: Request, id_canino: int):
+    """El canino existe y, si no es super admin, es de la entidad del usuario."""
+    canino = get_canino_by_id(id_canino) if id_canino else None
+    if not canino:
+        return None
+    if not es_super_admin(request) and canino.get('id_entidad') != request.session.get('id_entidad'):
+        return None
+    return canino
+
+
+@app.post('/geolocalizacion/dispositivos/nuevo')
+async def nuevo_dispositivo_post(request: Request, id_canino: int = Form(...), id_usuario: str = Form(''),
+                                 tipo: str = Form('smartphone'), modelo: str = Form('')):
+    r = redirigir_si_guia(request)
+    if r:
+        return r
+    canino = _canino_permitido(request, id_canino)
+    if not canino:
+        request.session['flash_form_error'] = 'Selecciona un canino válido.'
+        return RedirectResponse(url='/geolocalizacion', status_code=303)
+    tipo = tipo if tipo in ('smartphone', 'collar_gps') else 'smartphone'
+    # Por defecto el celular es del guía actual del canino.
+    id_guia = int(id_usuario) if id_usuario.isdigit() else canino.get('id_guia')
+    # Identificador numérico de 10 dígitos: es lo que se escribe en la app y lo
+    # que identifica al dispositivo en cada reporte.
+    identificador = str(secrets.randbelow(10 ** 10)).zfill(10)
+    create_dispositivo(canino['id_entidad'], id_guia, canino['id'], identificador, tipo, modelo.strip() or None)
+    request.session['flash_geo'] = {'identificador': identificador, 'canino': canino['nombre'], 'tipo': tipo}
+    return RedirectResponse(url='/geolocalizacion', status_code=303)
+
+
+@app.post('/geolocalizacion/dispositivos/{id_disp}/editar')
+async def editar_dispositivo_post(request: Request, id_disp: int, id_canino: int = Form(...),
+                                  id_usuario: str = Form(''), modelo: str = Form(''), activo: str = Form('')):
+    r = redirigir_si_guia(request)
+    if r:
+        return r
+    disp = get_dispositivo_by_id(id_disp)
+    if not disp or (not es_super_admin(request) and disp['id_entidad'] != request.session.get('id_entidad')):
+        return RedirectResponse(url='/geolocalizacion', status_code=303)
+    canino = _canino_permitido(request, id_canino)
+    if not canino:
+        request.session['flash_form_error'] = 'Selecciona un canino válido.'
+        return RedirectResponse(url='/geolocalizacion', status_code=303)
+    id_guia = int(id_usuario) if id_usuario.isdigit() else canino.get('id_guia')
+    update_dispositivo(id_disp, id_guia, canino['id'], modelo.strip() or None, activo == '1')
+    return RedirectResponse(url='/geolocalizacion', status_code=303)
+
+
+@app.get('/api/posiciones/ultimas')
+async def api_posiciones_ultimas(request: Request):
+    if not es_sesion_valida(request):
+        return JSONResponse({'error': 'no autenticado'}, status_code=401)
+    id_ent, id_guia = _filtro_geo(request)
+    return JSONResponse([_posicion_json(f) for f in get_ultimas_posiciones(id_ent, id_guia)])
+
+
+@app.get('/api/posiciones/recorrido')
+async def api_posiciones_recorrido(request: Request, dispositivo: int, fecha: str = ''):
+    """Puntos del dispositivo en un día (fecha local de Colombia, AAAA-MM-DD)."""
+    if not es_sesion_valida(request):
+        return JSONResponse({'error': 'no autenticado'}, status_code=401)
+    id_ent, id_guia = _filtro_geo(request)
+    permitidos = {d['id'] for d in get_dispositivos(id_ent, id_guia)}
+    if dispositivo not in permitidos:
+        return JSONResponse({'error': 'dispositivo no permitido'}, status_code=403)
+    try:
+        dia = date.fromisoformat(fecha) if fecha else datetime.now(_zona_horaria()).date()
+    except ValueError:
+        return JSONResponse({'error': 'fecha inválida'}, status_code=400)
+    inicio_local = datetime.combine(dia, datetime.min.time(), tzinfo=_zona_horaria())
+    desde = inicio_local.astimezone(timezone.utc).replace(tzinfo=None)
+    hasta = desde + timedelta(days=1)
+    puntos = get_recorrido(dispositivo, desde, hasta)
+    return JSONResponse([{'lat': _num(p['lat']), 'lng': _num(p['lng']), 'epoch': _num(p['epoch']),
+                          'velocidad': _num(p['velocidad'])} for p in puntos])
 
 
 @app.get('/vision-artificial', response_class=HTMLResponse)

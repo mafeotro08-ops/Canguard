@@ -12,6 +12,15 @@
     <title>CANGUARD - Admin Panel</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="shortcut icon" href="https://placehold.co/32x32/FFD700/000000?text=K9">
+    <script>
+        // Recuerda si el menú de escritorio estaba oculto (se aplica antes de pintar)
+        try {
+            if (window.matchMedia('(min-width: 901px)').matches &&
+                localStorage.getItem('menu_oculto') === '1') {
+                document.documentElement.classList.add('menu-oculto');
+            }
+        } catch (e) {}
+    </script>
     <style>
         /* ════════════════════════════════════════════════════════
            VARIABLES POR TEMA
@@ -258,7 +267,7 @@
         ════════════════════════════════════════════════════════ */
         .main-content {
             flex-grow: 1;
-            padding: 40px;
+            padding: 64px 40px 40px;   /* espacio arriba para el botón de menú */
             overflow-y: auto;
             position: relative;
             background: transparent;  /* deja ver el .bg-grid fijo detrás */
@@ -289,12 +298,113 @@
             background: var(--badge-ok-bg);
             color: var(--badge-ok-text);
         }
+
+        /* ════════════════════════════════════════════════════════
+           MENÚ HAMBURGUESA Y DISEÑO RESPONSIVO
+           Escritorio: el botón oculta/muestra la barra lateral (se recuerda).
+           Celular (≤ 900px): la barra lateral es un cajón que se desliza
+           desde la izquierda y se cierra al tocar una opción o el fondo.
+        ════════════════════════════════════════════════════════ */
+        .menu-btn {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 999;   /* debajo de las ventanas modales (z-index 1000) */
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            border: 1px solid var(--sidebar-border);
+            background: var(--sidebar-bg);
+            color: var(--primary);
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,0,0,.25);
+        }
+        .menu-btn:hover { color: var(--primary-hover); }
+        .sidebar-overlay { display: none; }
+
+        .main-content, .content-inner { min-width: 0; }
+        img, video { max-width: 100%; }
+
+        /* Escritorio con la barra oculta */
+        @media (min-width: 901px) {
+            html.menu-oculto .sidebar { display: none; }
+            html.menu-oculto .bg-grid { left: 0; }
+            html.menu-oculto .main-content { padding-left: 72px; }
+            .sidebar-header { padding-top: 64px; }   /* deja libre el botón de menú sobre el logo */
+        }
+
+        /* Celular y tablet vertical */
+        @media (max-width: 900px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                height: 100vh;
+                width: min(288px, 84vw);
+                min-width: 0;
+                transform: translateX(-102%);
+                transition: transform .28s ease;
+                box-shadow: 4px 0 24px rgba(0,0,0,.35);
+                z-index: 1050;
+            }
+            html.menu-abierto .sidebar { transform: translateX(0); }
+            html.menu-abierto .menu-btn { z-index: 1100; }   /* la X queda sobre el cajón */
+            html.modal-abierto .menu-btn { display: none; }
+            .sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(2,6,23,.55);
+                z-index: 1040;
+            }
+            html.menu-abierto .sidebar-overlay { display: block; }
+            .bg-grid { left: 0; }
+            .main-content { padding: 64px 16px 24px; }
+            .sidebar-header { padding-top: 64px; }
+        }
+
+        /* Ajustes finos para celular */
+        @media (max-width: 640px) {
+            .main-content { padding: 64px 12px 20px; }
+
+            /* Cuadrículas de dos o más columnas pasan a una sola columna */
+            [style*="grid-template-columns"],
+            .FGrid, .form-grid-2, .form-grid-3, .top-section { grid-template-columns: 1fr !important; }
+            .fw { grid-column: auto !important; }
+
+            /* Tablas: se desplazan horizontalmente dentro de su tarjeta */
+            table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                max-width: 100%;
+            }
+
+            /* Ventanas modales casi a todo el ancho de la pantalla */
+            .modal-overlay, .modal-bg { padding: 10px !important; align-items: flex-end !important; }
+            .modal-box {
+                max-width: 100% !important;
+                width: 100% !important;
+                max-height: 94vh !important;
+                border-radius: 14px 14px 10px 10px !important;
+            }
+        }
     </style>
 </head>
 
 <body>
     <!-- Grid animado con perspectiva (detrás del contenido, igual al login) -->
     <div class="bg-grid" aria-hidden="true"></div>
+
+    <button type="button" class="menu-btn" id="menuBtn" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="true" onclick="alternarMenu()">
+        <i class="bi bi-list" id="menuIcono"></i>
+    </button>
+    <div class="sidebar-overlay" onclick="cerrarMenuMovil()"></div>
 
     <aside class="sidebar rol-{{ session.rol }}">
         <div class="sidebar-header">
@@ -449,5 +559,63 @@
 })();
 </script>
 {% endif %}
+<script>
+/* ══════════════════════════════════════════
+   MENÚ HAMBURGUESA
+   Celular: abre/cierra el cajón. Escritorio: oculta/muestra la barra y lo recuerda.
+══════════════════════════════════════════ */
+(function () {
+    const html = document.documentElement;
+    const movil = () => window.matchMedia('(max-width: 900px)').matches;
+    const icono = document.getElementById('menuIcono');
+    const boton = document.getElementById('menuBtn');
+
+    function pintar() {
+        const abierto = movil() ? html.classList.contains('menu-abierto')
+                                : !html.classList.contains('menu-oculto');
+        icono.className = abierto ? 'bi bi-x-lg' : 'bi bi-list';
+        boton.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+    }
+
+    window.alternarMenu = function () {
+        if (movil()) {
+            html.classList.toggle('menu-abierto');
+        } else {
+            const oculto = html.classList.toggle('menu-oculto');
+            try { localStorage.setItem('menu_oculto', oculto ? '1' : '0'); } catch (e) {}
+        }
+        pintar();
+    };
+
+    window.cerrarMenuMovil = function () {
+        html.classList.remove('menu-abierto');
+        pintar();
+    };
+
+    // Al tocar una opción en el celular, el cajón se cierra solo
+    document.querySelectorAll('.sidebar a').forEach(function (a) {
+        a.addEventListener('click', function () { if (movil()) window.cerrarMenuMovil(); });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') window.cerrarMenuMovil();
+    });
+    window.matchMedia('(min-width: 901px)').addEventListener('change', function (e) {
+        if (e.matches) html.classList.remove('menu-abierto');
+        pintar();
+    });
+    // Con una ventana modal abierta, el botón de menú se oculta para no tapar el formulario
+    function revisarModales() {
+        const hay = Array.from(document.querySelectorAll('.modal-overlay, .modal-bg'))
+            .some(function (e) { return getComputedStyle(e).display !== 'none'; });
+        html.classList.toggle('modal-abierto', hay);
+    }
+    new MutationObserver(revisarModales).observe(document.body, {
+        subtree: true, attributes: true, attributeFilter: ['class', 'style']
+    });
+    revisarModales();
+
+    pintar();
+})();
+</script>
 </body>
 </html>

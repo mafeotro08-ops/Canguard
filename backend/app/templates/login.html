@@ -220,6 +220,14 @@
             text-align: center;
             margin-bottom: 20px;
         }
+
+        /* Celular: la tarjeta cabe en la pantalla y el título no se corta */
+        .login-card { box-sizing: border-box; }
+        @media (max-width: 640px) {
+            body { padding: 16px; }
+            .login-card { padding: 34px 22px; width: 100%; }
+            .header h1 { font-size: 32px; letter-spacing: 5px; }
+        }
     </style>
 </head>
 <body>

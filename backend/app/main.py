@@ -53,6 +53,7 @@ from .seguridad import (
     limitador_login, limitador_recuperar, MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO,
 )
 from . import dosfactores as f2a
+from .paradas import detectar_paradas
 from psycopg import errors as pg_errors
 from .auth import (
     crear_sesion, es_sesion_valida, es_super_admin, cerrar_sesion,
@@ -1972,6 +1973,27 @@ async def api_posiciones_recorrido(request: Request, dispositivo: int, fecha: st
     puntos = get_recorrido(dispositivo, desde, hasta)
     return JSONResponse([{'lat': _num(p['lat']), 'lng': _num(p['lng']), 'epoch': _num(p['epoch']),
                           'velocidad': _num(p['velocidad'])} for p in puntos])
+
+
+@app.get('/api/posiciones/paradas')
+async def api_posiciones_paradas(request: Request, dispositivo: int, fecha: str = ''):
+    """Paradas (permanencia) de un dispositivo en un día; mismas reglas de permiso que el recorrido."""
+    if not es_sesion_valida(request):
+        return JSONResponse({'error': 'no autenticado'}, status_code=401)
+    id_ent, id_guia = _filtro_geo(request)
+    permitidos = {d['id'] for d in get_dispositivos(id_ent, id_guia)}
+    if dispositivo not in permitidos:
+        return JSONResponse({'error': 'dispositivo no permitido'}, status_code=403)
+    try:
+        dia = date.fromisoformat(fecha) if fecha else datetime.now(_zona_horaria()).date()
+    except ValueError:
+        return JSONResponse({'error': 'fecha inválida'}, status_code=400)
+    inicio_local = datetime.combine(dia, datetime.min.time(), tzinfo=_zona_horaria())
+    desde = inicio_local.astimezone(timezone.utc).replace(tzinfo=None)
+    hasta = desde + timedelta(days=1)
+    puntos = get_recorrido(dispositivo, desde, hasta)
+    puntos = [{'lat': _num(p['lat']), 'lng': _num(p['lng']), 'epoch': _num(p['epoch'])} for p in puntos]
+    return JSONResponse(detectar_paradas(puntos))
 
 
 @app.get('/vision-artificial', response_class=HTMLResponse)

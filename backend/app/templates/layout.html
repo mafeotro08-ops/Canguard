@@ -473,6 +473,9 @@
         </nav>
 
         <div class="nav-footer">
+            <a href="/privacidad" class="nav-item {% if request.url.path == '/privacidad' %}active{% endif %}">
+                <i class="bi bi-file-earmark-lock-fill"></i> PRIVACIDAD
+            </a>
             <a href="/seguridad" class="nav-item {% if request.url.path == '/seguridad' %}active{% endif %}">
                 <i class="bi bi-shield-lock-fill"></i> SEGURIDAD
             </a>

@@ -292,8 +292,28 @@ function horaLocal(epoch) {
     return new Date(epoch * 1000).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 }
 
+let capaPuntos = null;          // puntos de cada reporte del día
+let puntosRecorrido = [];       // reportes del día seleccionado, en orden de hora
+
+// Dibuja la línea del recorrido y cada reporte con su número de orden (1, 2, 3...).
+function dibujarLineaYPasos(puntos) {
+    if (recorrido) { mapa.removeLayer(recorrido); recorrido = null; }
+    if (capaPuntos) { mapa.removeLayer(capaPuntos); capaPuntos = null; }
+    if (puntos.length >= 2) {
+        recorrido = L.polyline(puntos.map(p => [p.lat, p.lng]), { color: '#b8860b', weight: 4, opacity: .85 }).addTo(mapa);
+    }
+    capaPuntos = L.layerGroup(puntos.map((p, i) => {
+        const vel = p.velocidad != null ? `<br>Velocidad: ${Math.round(p.velocidad)} km/h` : '';
+        return L.marker([p.lat, p.lng], {
+            icon: L.divIcon({ className: '', html: `<div style="background:#fff;color:#7a5a00;border:1.5px solid #b8860b;border-radius:50%;width:18px;height:18px;line-height:15px;text-align:center;font-weight:700;font-size:9px;">${i + 1}</div>`, iconSize: [18, 18], iconAnchor: [9, 9] })
+        }).bindPopup(`<b>Paso ${i + 1}</b><br>Hora: ${horaLocal(p.epoch)}${vel}`);
+    })).addTo(mapa);
+}
+
 async function dibujarRecorrido() {
     if (recorrido) { mapa.removeLayer(recorrido); recorrido = null; }
+    if (capaPuntos) { mapa.removeLayer(capaPuntos); capaPuntos = null; }
+    puntosRecorrido = [];
     marcadoresParadas.forEach(m => mapa.removeLayer(m));
     marcadoresParadas = [];
     document.getElementById('resumenParadas').textContent = '';
@@ -303,9 +323,10 @@ async function dibujarRecorrido() {
         const r = await fetch(`/api/posiciones/recorrido?dispositivo=${seleccionado}&fecha=${fecha}`);
         if (!r.ok) return;
         const puntos = await r.json();
+        puntosRecorrido = puntos;
+        dibujarLineaYPasos(puntos);
         if (puntos.length >= 2) {
-            recorrido = L.polyline(puntos.map(p => [p.lat, p.lng]), { color: '#b8860b', weight: 4, opacity: .85 }).addTo(mapa);
-            mapa.fitBounds(recorrido.getBounds().pad(0.2), { maxZoom: 17 });
+            mapa.fitBounds(L.latLngBounds(puntos.map(p => [p.lat, p.lng])).pad(0.2), { maxZoom: 17 });
         }
         // Paradas: sectores donde la unidad permaneció al menos tres minutos
         const rp = await fetch(`/api/posiciones/paradas?dispositivo=${seleccionado}&fecha=${fecha}`);

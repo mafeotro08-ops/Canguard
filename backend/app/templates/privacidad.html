@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+
+{% block contenido %}
+<!--
+  Aviso de privacidad y autorización de tratamiento de datos (Ley 1581 de 2012).
+  Ruta /privacidad en main.py. Texto con campos entre corchetes que la entidad
+  debe completar y que un asesor jurídico debe revisar antes de usarlo.
+-->
+<style>
+    .page-header { margin-bottom: 28px; }
+    .page-header h1 { font-size: 22px; font-weight: 800; color: var(--text-main); letter-spacing: 1px; }
+    .page-header .sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+    .priv-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px;
+                 box-shadow: var(--card-shadow); padding: 28px; max-width: 880px; }
+    .priv-card h2 { font-size: 14px; font-weight: 800; color: var(--text-main); letter-spacing: 1px;
+                    text-transform: uppercase; margin: 22px 0 10px; }
+    .priv-card h2:first-child { margin-top: 0; }
+    .priv-card p, .priv-card li { font-size: 13px; color: var(--text-muted); line-height: 1.7; margin-bottom: 8px; }
+    .priv-card ul { padding-left: 20px; margin-bottom: 8px; }
+    .priv-card .campo { background: #fff7d6; padding: 0 4px; border-radius: 3px; color: #7a5a00; }
+</style>
+
+<div class="page-header">
+    <h1>PRIVACIDAD Y AUTORIZACIÓN</h1>
+    <div class="sub">Aviso de privacidad y autorización para el tratamiento de datos personales</div>
+</div>
+
+<div class="priv-card">
+
+    <h2>1. Responsable del tratamiento</h2>
+    <p><span class="campo">[Nombre de la entidad]</span>, con NIT <span class="campo">[NIT]</span>, domicilio en <span class="campo">[dirección]</span>, correo <span class="campo">[correo de contacto]</span>.</p>
+
+    <h2>2. Datos que se recogen</h2>
+    <ul>
+        <li>Identificación del guía y del canino: nombre, documento, entidad y datos del canino que la entidad registra.</li>
+        <li>Ubicación del celular del guía (o del collar GPS, si aplica), en tiempo real y el recorrido del día, incluidas las paradas.</li>
+        <li>Fotografías y videos del guía o del canino, tomados en actividades de la entidad, cuando la entidad los use (ver el punto 4).</li>
+    </ul>
+
+    <h2>3. Finalidades</h2>
+    <ul>
+        <li>Seguimiento de la ubicación del binomio guía-canino durante el servicio, para la seguridad del guía y la coordinación de la unidad.</li>
+        <li>Consulta de recorridos y paradas para control operativo y para reportes de la entidad.</li>
+        <li>Gestión de cuentas de acceso a la plataforma.</li>
+    </ul>
+
+    <h2>4. Uso de imagen (fotos y videos)</h2>
+    <p>Las fotografías y videos en los que aparezca el guía o el canino solo se usarán para <span class="campo">[finalidades concretas: informes, capacitación, redes oficiales, etc.]</span>. Cuando se requiera publicarlos fuera de la entidad, se pedirá una autorización expresa adicional.</p>
+
+    <h2>5. Quién accede a los datos</h2>
+    <p>Solo el personal autorizado por la entidad según su rol (administrador, supervisor u operador). Los datos no se venden ni se comparten con terceros, salvo por obligación legal.</p>
+
+    <h2>6. Tiempo de conservación</h2>
+    <p>Los datos se conservan mientras el guía o el canino estén vinculados a la entidad y <span class="campo">[plazo adicional, si aplica]</span> después. Los recorridos se conservan por <span class="campo">[tiempo]</span>.</p>
+
+    <h2>7. Sus derechos</h2>
+    <p>Como titular puede conocer, actualizar, rectificar y suprimir sus datos, revocar la autorización y presentar quejas ante la Superintendencia de Industria y Comercio. Para ejercerlos escriba a <span class="campo">[correo]</span>.</p>
+
+    <h2>8. Autorización</h2>
+    <p>Al aceptar esta autorización, el titular declara que fue informado de lo anterior y autoriza a <span class="campo">[nombre de la entidad]</span> a tratar sus datos personales, incluida su ubicación y su imagen, para las finalidades descritas.</p>
+
+</div>
+{% endblock %}

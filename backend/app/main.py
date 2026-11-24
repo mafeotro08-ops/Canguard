@@ -375,6 +375,15 @@ def _error_credenciales_2fa(request: Request, user: dict, password: str, codigo:
     return None
 
 
+@app.get('/privacidad', response_class=HTMLResponse)
+async def privacidad_page(request: Request):
+    """Aviso de privacidad y autorización de tratamiento de datos (Ley 1581 de 2012)."""
+    r = redirigir_si_no_autenticado(request)
+    if r:
+        return r
+    return templates.TemplateResponse('privacidad.html', ctx(request, usuario=_usuario_logueado(request)))
+
+
 @app.get('/seguridad', response_class=HTMLResponse)
 async def seguridad_page(request: Request):
     r = redirigir_si_no_autenticado(request)
